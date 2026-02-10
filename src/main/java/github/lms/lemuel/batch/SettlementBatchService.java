@@ -3,9 +3,11 @@ package github.lms.lemuel.batch;
 import github.lms.lemuel.domain.Payment;
 import github.lms.lemuel.domain.Settlement;
 import github.lms.lemuel.domain.SettlementAdjustment;
+import github.lms.lemuel.monitoring.SettlementBatchMetrics;
 import github.lms.lemuel.repository.PaymentRepository;
-import github.lms.lemuel.repository.SettlementRepository;
 import github.lms.lemuel.repository.SettlementAdjustmentRepository;
+import github.lms.lemuel.repository.SettlementRepository;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,42 +19,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
-/**
- * 정산 배치 서비스 (일 단위 배치)
- *
- * Pseudo Code:
- *
- * 1. 대상 조회 (createDailySettlements - 매일 새벽 2시)
- *    BEGIN TRANSACTION
- *      targetDate = yesterday
- *      payments = SELECT * FROM payments
- *                 WHERE status = 'CAPTURED'
- *                 AND updated_at BETWEEN targetDate 00:00:00 AND targetDate 23:59:59
- *
- *      FOR EACH payment IN payments:
- *        existingSettlement = SELECT * FROM settlements WHERE payment_id = payment.id
- *        IF existingSettlement EXISTS:
- *          SKIP (이미 정산 대상 존재)
- *        ELSE:
- *          INSERT INTO settlements (payment_id, order_id, amount, status, settlement_date)
- *          VALUES (payment.id, payment.order_id, payment.amount, 'PENDING', targetDate)
- *      END FOR
- *    COMMIT
- *
- * 2. 정산 확정 (confirmDailySettlements - 매일 새벽 3시)
- *    BEGIN TRANSACTION
- *      targetDate = yesterday
- *      settlements = SELECT * FROM settlements
- *                    WHERE settlement_date = targetDate
- *                    AND status = 'PENDING'
- *
- *      FOR EACH settlement IN settlements:
- *        UPDATE settlements
- *        SET status = 'CONFIRMED', confirmed_at = NOW()
- *        WHERE id = settlement.id
- *      END FOR
- *    COMMIT
- */
 @Service
 public class SettlementBatchService {
 
@@ -61,109 +27,128 @@ public class SettlementBatchService {
     private final PaymentRepository paymentRepository;
     private final SettlementRepository settlementRepository;
     private final SettlementAdjustmentRepository settlementAdjustmentRepository;
+    private final SettlementBatchMetrics batchMetrics;
 
     public SettlementBatchService(PaymentRepository paymentRepository,
-                                  SettlementRepository settlementRepository,
-                                  SettlementAdjustmentRepository settlementAdjustmentRepository) {
+        SettlementRepository settlementRepository,
+        SettlementAdjustmentRepository settlementAdjustmentRepository,
+        SettlementBatchMetrics batchMetrics) {
         this.paymentRepository = paymentRepository;
         this.settlementRepository = settlementRepository;
         this.settlementAdjustmentRepository = settlementAdjustmentRepository;
+        this.batchMetrics = batchMetrics;
     }
 
-    /**
-     * 매일 새벽 2시에 전날 CAPTURED 상태의 결제를 정산 대상으로 생성
-     * 크론 표현식: 초 분 시 일 월 요일
-     * "0 0 2 * * *" = 매일 2시 0분 0초
-     */
     @Scheduled(cron = "0 0 2 * * *")
     @Transactional
     public void createDailySettlements() {
-        // STEP 1: 대상 조회 - 전날 CAPTURED 결제 조회
-        LocalDate yesterday = LocalDate.now().minusDays(1);
-        LocalDateTime startOfYesterday = yesterday.atStartOfDay();
-        LocalDateTime endOfYesterday = yesterday.atTime(LocalTime.MAX);
+        Timer.Sample sample = batchMetrics.startTimer(); // ✅ 변경
 
-        logger.info("정산 배치 시작: {} ~ {}", startOfYesterday, endOfYesterday);
+        try {
+            LocalDate yesterday = LocalDate.now().minusDays(1);
+            LocalDateTime startOfYesterday = yesterday.atStartOfDay();
+            LocalDateTime endOfYesterday = yesterday.atTime(LocalTime.MAX);
 
-        List<Payment> capturedPayments = paymentRepository.findCapturedPaymentsBetween(
-                startOfYesterday, endOfYesterday
-        );
+            logger.info("정산 배치 시작: {} ~ {}", startOfYesterday, endOfYesterday);
 
-        // STEP 2: Item 생성 - 각 결제에 대해 정산 대상 생성
-        int createdCount = 0;
-        for (Payment payment : capturedPayments) {
-            // 중복 체크: 이미 정산 대상이 생성된 경우 스킵
-            if (settlementRepository.findByPaymentId(payment.getId()).isPresent()) {
-                logger.debug("이미 정산 대상이 존재함: paymentId={}", payment.getId());
-                continue;
+            List<Payment> capturedPayments =
+                paymentRepository.findCapturedPaymentsBetween(startOfYesterday, endOfYesterday);
+
+            int createdCount = 0;
+            for (Payment payment : capturedPayments) {
+                if (settlementRepository.findByPaymentId(payment.getId()).isPresent()) {
+                    logger.debug("이미 정산 대상이 존재함: paymentId={}", payment.getId());
+                    continue;
+                }
+
+                Settlement settlement = new Settlement();
+                settlement.setPaymentId(payment.getId());
+                settlement.setOrderId(payment.getOrderId());
+                settlement.setAmount(payment.getAmount());
+                settlement.setStatus(Settlement.SettlementStatus.PENDING);
+                settlement.setSettlementDate(yesterday);
+
+                settlementRepository.save(settlement);
+                createdCount++;
             }
 
-            Settlement settlement = new Settlement();
-            settlement.setPaymentId(payment.getId());
-            settlement.setOrderId(payment.getOrderId());
-            settlement.setAmount(payment.getAmount());
-            settlement.setStatus(Settlement.SettlementStatus.PENDING);
-            settlement.setSettlementDate(yesterday);
+            logger.info("정산 배치 완료: {} 건 생성됨", createdCount);
 
-            settlementRepository.save(settlement);
-            createdCount++;
-            logger.debug("정산 대상 생성: paymentId={}, amount={}", payment.getId(), payment.getAmount());
+            batchMetrics.incrementSettlementCreated(createdCount);
+            batchMetrics.stopAndRecordSettlementCreation(sample);
+
+        } catch (Exception e) {
+            logger.error("정산 생성 배치 실패", e);
+            batchMetrics.recordBatchFailure("settlement_creation");
+            throw e;
         }
-
-        logger.info("정산 배치 완료: {} 건 생성됨", createdCount);
     }
 
-    /**
-     * 매일 새벽 3시에 전날 생성된 PENDING 상태의 정산을 CONFIRMED로 확정
-     * "0 0 3 * * *" = 매일 3시 0분 0초
-     */
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void confirmDailySettlements() {
-        // STEP 3: Confirm - PENDING 정산을 CONFIRMED로 확정
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        Timer.Sample sample = batchMetrics.startTimer(); // ✅ 변경
 
-        logger.info("정산 확정 배치 시작: settlementDate={}", yesterday);
+        try {
+            LocalDate yesterday = LocalDate.now().minusDays(1);
 
-        List<Settlement> pendingSettlements = settlementRepository.findBySettlementDate(yesterday);
+            logger.info("정산 확정 배치 시작: settlementDate={}", yesterday);
 
-        int confirmedCount = 0;
-        for (Settlement settlement : pendingSettlements) {
-            if (settlement.getStatus() == Settlement.SettlementStatus.PENDING) {
-                settlement.setStatus(Settlement.SettlementStatus.CONFIRMED);
-                settlement.setConfirmedAt(LocalDateTime.now());
-                settlementRepository.save(settlement);
-                confirmedCount++;
-                logger.debug("정산 확정: settlementId={}, amount={}", settlement.getId(), settlement.getAmount());
+            // ⚠️ 메서드명이 findBySettlementDate면 상태 필터가 없을 수 있음 (아래 개선 포인트 참고)
+            List<Settlement> settlements = settlementRepository.findBySettlementDate(yesterday);
+
+            int confirmedCount = 0;
+            for (Settlement settlement : settlements) {
+                if (settlement.getStatus() == Settlement.SettlementStatus.PENDING) {
+                    settlement.setStatus(Settlement.SettlementStatus.CONFIRMED);
+                    settlement.setConfirmedAt(LocalDateTime.now());
+                    settlementRepository.save(settlement);
+                    confirmedCount++;
+                }
             }
-        }
 
-        logger.info("정산 확정 배치 완료: {} 건 확정됨", confirmedCount);
+            logger.info("정산 확정 배치 완료: {} 건 확정됨", confirmedCount);
+
+            batchMetrics.incrementSettlementConfirmed(confirmedCount);
+            batchMetrics.stopAndRecordSettlementConfirmation(sample);
+
+        } catch (Exception e) {
+            logger.error("정산 확정 배치 실패", e);
+            batchMetrics.recordBatchFailure("settlement_confirmation");
+            throw e;
+        }
     }
 
-    /**
-     * 매일 새벽 3시 10분에 PENDING 상태의 정산 조정을 CONFIRMED로 확정
-     * "0 10 3 * * *" = 매일 3시 10분 0초
-     */
     @Scheduled(cron = "0 10 3 * * *")
     @Transactional
     public void confirmDailySettlementAdjustments() {
-        LocalDate yesterday = LocalDate.now().minusDays(1);
+        Timer.Sample sample = batchMetrics.startTimer(); // ✅ 변경
 
-        logger.info("정산 조정 확정 배치 시작: adjustmentDate={}", yesterday);
+        try {
+            LocalDate yesterday = LocalDate.now().minusDays(1);
 
-        List<SettlementAdjustment> pendingAdjustments =
+            logger.info("정산 조정 확정 배치 시작: adjustmentDate={}", yesterday);
+
+            List<SettlementAdjustment> pendingAdjustments =
                 settlementAdjustmentRepository.findPendingByAdjustmentDate(yesterday);
 
-        int confirmedCount = 0;
-        for (SettlementAdjustment adjustment : pendingAdjustments) {
-            adjustment.setStatus(SettlementAdjustment.AdjustmentStatus.CONFIRMED);
-            adjustment.setConfirmedAt(LocalDateTime.now());
-            settlementAdjustmentRepository.save(adjustment);
-            confirmedCount++;
-            logger.debug("정산 조정 확정: adjustmentId={}, amount={}", adjustment.getId(), adjustment.getAmount());
-        }
+            int confirmedCount = 0;
+            for (SettlementAdjustment adjustment : pendingAdjustments) {
+                adjustment.setStatus(SettlementAdjustment.AdjustmentStatus.CONFIRMED);
+                adjustment.setConfirmedAt(LocalDateTime.now());
+                settlementAdjustmentRepository.save(adjustment);
+                confirmedCount++;
+            }
 
-        logger.info("정산 조정 확정 배치 완료: {} 건 확정됨", confirmedCount);
+            logger.info("정산 조정 확정 배치 완료: {} 건 확정됨", confirmedCount);
+
+            batchMetrics.incrementAdjustmentConfirmed(confirmedCount);
+            batchMetrics.stopAndRecordAdjustmentConfirmation(sample);
+
+        } catch (Exception e) {
+            logger.error("정산 조정 확정 배치 실패", e);
+            batchMetrics.recordBatchFailure("adjustment_confirmation");
+            throw e;
+        }
     }
 }

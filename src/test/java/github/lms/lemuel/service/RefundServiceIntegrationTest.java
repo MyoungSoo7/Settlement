@@ -231,4 +231,242 @@ class RefundServiceIntegrationTest {
                 .isInstanceOf(InvalidPaymentStateException.class)
                 .hasMessageContaining("CAPTURED 상태의 결제만 환불 가능");
     }
+
+    // ===== 경계값 테스트 추가 =====
+
+    @Test
+    @DisplayName("경계값 1: 정확히 결제 금액과 동일한 환불 (전액 환불)")
+    void testExactAmountRefund() {
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        // 10000원 결제에 정확히 10000원 환불
+        Refund refund = refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("10000.00"),
+                idempotencyKey,
+                "정확히 전액 환불"
+        );
+
+        assertThat(refund.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
+        assertThat(refund.getAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
+
+        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(payment.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
+        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(payment.isFullyRefunded()).isTrue();
+        assertThat(payment.getRefundableAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("경계값 2: 잔액이 딱 1원일 때 1원 환불")
+    void testOneWonRefundWhenOneWonLeft() {
+        // 9999원 먼저 환불
+        String idempotencyKey1 = UUID.randomUUID().toString();
+        refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("9999.00"),
+                idempotencyKey1,
+                "9999원 환불"
+        );
+
+        Payment afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(afterFirst.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("1.00"));
+        assertThat(afterFirst.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+
+        // 남은 1원 환불
+        String idempotencyKey2 = UUID.randomUUID().toString();
+        Refund refund2 = refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("1.00"),
+                idempotencyKey2,
+                "마지막 1원 환불"
+        );
+
+        assertThat(refund2.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
+
+        Payment afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(afterSecond.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
+        assertThat(afterSecond.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(afterSecond.getRefundableAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("경계값 3: 잔액이 1원 부족한 환불 시도 (실패)")
+    void testRefundExceedsBy1Won() {
+        // 9999원 먼저 환불
+        String idempotencyKey1 = UUID.randomUUID().toString();
+        refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("9999.00"),
+                idempotencyKey1,
+                "9999원 환불"
+        );
+
+        // 잔액 1원인데 2원 환불 시도
+        String idempotencyKey2 = UUID.randomUUID().toString();
+        assertThatThrownBy(() -> refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("2.00"),
+                idempotencyKey2,
+                "초과 환불 시도"
+        ))
+                .isInstanceOf(RefundExceedsPaymentException.class)
+                .hasMessageContaining("환불 가능 금액을 초과했습니다. 환불 가능: 1.00, 요청: 2.00");
+
+        // Payment 상태는 변경되지 않음
+        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(payment.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("9999.00"));
+        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+    }
+
+    @Test
+    @DisplayName("경계값 4: 0원 환불 시도 (실패)")
+    void testZeroAmountRefund() {
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        assertThatThrownBy(() -> refundService.createRefund(
+                testPayment.getId(),
+                BigDecimal.ZERO,
+                idempotencyKey,
+                "0원 환불 시도"
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("환불 금액은 0보다 커야 합니다");
+
+        // Payment 상태는 변경되지 않음
+        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(payment.getRefundedAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+    }
+
+    @Test
+    @DisplayName("경계값 5: 음수 금액 환불 시도 (실패)")
+    void testNegativeAmountRefund() {
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        assertThatThrownBy(() -> refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("-1000.00"),
+                idempotencyKey,
+                "음수 환불 시도"
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("환불 금액은 0보다 커야 합니다");
+    }
+
+    @Test
+    @DisplayName("경계값 6: 소수점 정밀도 테스트 (0.01원)")
+    void testDecimalPrecisionRefund() {
+        // 0.01원 환불
+        String idempotencyKey1 = UUID.randomUUID().toString();
+        Refund refund1 = refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("0.01"),
+                idempotencyKey1,
+                "0.01원 환불"
+        );
+
+        assertThat(refund1.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
+
+        Payment afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(afterFirst.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("0.01"));
+        assertThat(afterFirst.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("9999.99"));
+
+        // 9999.99원 환불 (전액)
+        String idempotencyKey2 = UUID.randomUUID().toString();
+        Refund refund2 = refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("9999.99"),
+                idempotencyKey2,
+                "나머지 전액 환불"
+        );
+
+        assertThat(refund2.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
+
+        Payment afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(afterSecond.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
+        assertThat(afterSecond.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+    }
+
+    @Test
+    @DisplayName("경계값 7: 부분환불 3회 누적 (복잡한 시나리오)")
+    void testMultiplePartialRefunds() {
+        // 1차: 3333.33원
+        String key1 = UUID.randomUUID().toString();
+        refundService.createRefund(testPayment.getId(), new BigDecimal("3333.33"), key1, "1차");
+
+        Payment after1 = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(after1.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("3333.33"));
+        assertThat(after1.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("6666.67"));
+        assertThat(after1.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+
+        // 2차: 3333.33원
+        String key2 = UUID.randomUUID().toString();
+        refundService.createRefund(testPayment.getId(), new BigDecimal("3333.33"), key2, "2차");
+
+        Payment after2 = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(after2.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("6666.66"));
+        assertThat(after2.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("3333.34"));
+        assertThat(after2.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+
+        // 3차: 3333.34원 (전액)
+        String key3 = UUID.randomUUID().toString();
+        refundService.createRefund(testPayment.getId(), new BigDecimal("3333.34"), key3, "3차");
+
+        Payment after3 = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(after3.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
+        assertThat(after3.getRefundableAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(after3.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(after3.isFullyRefunded()).isTrue();
+    }
+
+    @Test
+    @DisplayName("경계값 8: 전액 환불 후 추가 환불 시도 (실패)")
+    void testRefundAfterFullRefund() {
+        // 전액 환불
+        String key1 = UUID.randomUUID().toString();
+        refundService.createRefund(testPayment.getId(), new BigDecimal("10000.00"), key1, "전액 환불");
+
+        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+
+        // 추가 환불 시도 (REFUNDED 상태)
+        String key2 = UUID.randomUUID().toString();
+        assertThatThrownBy(() -> refundService.createRefund(
+                testPayment.getId(),
+                new BigDecimal("1.00"),
+                key2,
+                "추가 환불 시도"
+        ))
+                .isInstanceOf(InvalidPaymentStateException.class)
+                .hasMessageContaining("CAPTURED 상태의 결제만 환불 가능");
+    }
+
+    @Test
+    @DisplayName("경계값 9: 매우 큰 금액 환불 (오버플로우 방지)")
+    void testLargeAmountRefund() {
+        // 큰 금액 결제 생성
+        Payment largePayment = new Payment();
+        largePayment.setOrderId(999L);
+        largePayment.setAmount(new BigDecimal("99999999.99")); // DECIMAL(10, 2) 최대값
+        largePayment.setStatus(Payment.PaymentStatus.CAPTURED);
+        largePayment.setPaymentMethod("CARD");
+        largePayment.setPgTransactionId("PG-LARGE-" + UUID.randomUUID());
+        largePayment = paymentRepository.save(largePayment);
+
+        // 전액 환불
+        String idempotencyKey = UUID.randomUUID().toString();
+        Refund refund = refundService.createRefund(
+                largePayment.getId(),
+                new BigDecimal("99999999.99"),
+                idempotencyKey,
+                "큰 금액 환불"
+        );
+
+        assertThat(refund.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
+
+        Payment afterRefund = paymentRepository.findById(largePayment.getId()).orElseThrow();
+        assertThat(afterRefund.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("99999999.99"));
+        assertThat(afterRefund.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+    }
 }
