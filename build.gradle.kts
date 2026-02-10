@@ -36,6 +36,7 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.5")
 
     implementation("io.github.cdimascio:java-dotenv:5.2.2")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("org.postgresql:postgresql")
