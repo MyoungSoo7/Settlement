@@ -8,7 +8,73 @@ Spring Boot 기반의 JWT 인증 + 주문/결제/정산 통합 시스템입니�
 - **버전**: 0.0.1-SNAPSHOT
 - **Java**: 21
 - **Spring Boot**: 3.5.10
-- **데이터베이스**: PostgreSQL 16
+- **데이터베이스**: PostgreSQL 17
+
+## 🔥 v0.2.0 부분환불 리팩토링 (2026-02-10)
+
+### 주요 변경사항
+
+**환불 모델 개선**:
+- ❌ **이전**: 부분환불 시 음수 Payment 레코드 생성 (비표준, 조회/회계 복잡도 증가)
+- ✅ **현재**: Refund 엔티티로 환불 이력 분리 관리 (실무 표준 패턴)
+
+**새로운 기능**:
+1. **멱등성 보장**: `Idempotency-Key` 헤더 기반 중복 환불 방지
+2. **동시성 제어**: Payment row-level lock (PESSIMISTIC_WRITE)으로 환불 금액 초과 방지
+3. **정산 조정**: CONFIRMED 정산 후 환불 시 `SettlementAdjustment` 생성 (회계 감사 추적)
+4. **환불 누적 추적**: `Payment.refundedAmount`로 실시간 환불 누적 관리
+
+### 도메인 모델 변경
+
+```
+Payment (원결제)
+  - refundedAmount: 환불 누적 합계 (0 ~ amount)
+  - status: REFUNDED (전액 환불 시)
+
+Refund (환불 이력) - 신규 추가
+  - payment_id, amount, status, idempotency_key
+  - (payment_id, idempotency_key) UNIQUE 제약
+
+SettlementAdjustment (정산 조정) - 신규 추가
+  - settlement_id, refund_id, amount(음수)
+  - CONFIRMED 정산에 대한 환불 처리용
+```
+
+### API 변경사항
+
+**신규 API**:
+```http
+POST /refunds/{paymentId}
+Idempotency-Key: {UUID}
+Content-Type: application/json
+
+{
+  "amount": 5000.00,
+  "reason": "고객 요청"
+}
+```
+
+**기존 API 호환 유지** (Idempotency-Key 필수):
+```http
+POST /refunds/full/{paymentId}
+Idempotency-Key: {UUID}
+
+POST /refunds/partial/{paymentId}?refundAmount=5000.00
+Idempotency-Key: {UUID}
+```
+
+### 정산 배치 추가
+
+- **새벽 3시 10분**: 정산 조정 확정 배치 (`confirmDailySettlementAdjustments`)
+  - PENDING -> CONFIRMED 상태 전환
+
+### 마이그레이션 가이드
+
+1. `V4__refunds_and_settlement_adjustments.sql` 자동 실행 (Flyway)
+2. 기존 음수 Payment 레코드가 있다면 수동 마이그레이션 필요
+3. 환불 API 호출 시 **`Idempotency-Key` 헤더 필수**
+
+---
 
 ## 🏗️ 시스템 아키텍처
 
@@ -27,27 +93,28 @@ Spring Boot 기반의 JWT 인증 + 주문/결제/정산 통합 시스템입니�
 ┌─────────────────────────────────────────────────────────────┐
 │                     Controllers                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │AuthController│  │OrderController│  │PaymentControl│     │
-│  │ /auth/login  │  │   /orders    │  │  /payments   │     │
+│  │AuthController│  │OrderController│  │RefundControl │     │
+│  │ /auth/login  │  │   /orders    │  │   /refunds   │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Service Layer                            │
+│  RefundService + SettlementAdjustmentService                │
 │           SettlementBatchService (일 단위 배치)             │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   Repository Layer                          │
-│  UserRepo  │  OrderRepo  │  PaymentRepo  │ SettlementRepo  │
+│  Refund | SettlementAdjustment | Payment | Settlement       │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  PostgreSQL Database                        │
-│        users │ orders │ payments │ settlements             │
+│  refunds | settlement_adjustments | payments | settlements  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,223 +132,120 @@ Spring Boot 기반의 JWT 인증 + 주문/결제/정산 통합 시스템입니�
 - **CAPTURED**: 매입/확정(실 결제 완료)
 - **FAILED**: 실패
 - **CANCELED**: 승인 취소
-- **REFUNDED**: 환불
+- **REFUNDED**: 전액 환불 완료
+
+### 환불(Refund) 상태 - v0.2.0 신규
+- **REQUESTED**: 환불 요청됨
+- **APPROVED**: 환불 승인됨
+- **COMPLETED**: 환불 완료
+- **FAILED**: 환불 실패
+- **CANCELED**: 환불 취소
 
 ### 정산(Settlement) 상태
 - **PENDING**: 정산 대상 생성(아직 확정 전)
 - **CONFIRMED**: 정산 금액 확정(회계 기준 확정)
-- **CANCELED**: 정산 취소(환불/취소 반영)
+- **CANCELED**: 정산 취소(환불/취소 반영) - *deprecated in v0.2.0*
 
-### 상태 전이 흐름
+### 정산 조정(SettlementAdjustment) 상태 - v0.2.0 신규
+- **PENDING**: 조정 대기 중
+- **CONFIRMED**: 조정 확정
+
+### 환불 처리 흐름 (v0.2.0)
 
 ```
-[Order] CREATED
-   | (결제 시작)
+[Payment] CAPTURED (amount: 10000, refundedAmount: 0)
+   |
+   | (부분환불 3000원 요청 + Idempotency-Key)
    v
-[Payment] READY -> AUTHORIZED -> CAPTURED
-   |                         |
-   | (실패)                  | (결제완료 이벤트)
-   v                         v
-[Payment] FAILED         [Order] PAID
-                             |
-                             | (정산대상 생성 - 매일 새벽 2시 배치)
-                             v
-                        [Settlement] PENDING
-                             |
-                             | (정산확정 - 매일 새벽 3시 배치)
-                             v
-                        [Settlement] CONFIRMED
-                             |
-                             | (환불/취소 발생)
-                             v
-                        [Settlement] CANCELED
-                             ^
-                             |
-[Payment] REFUNDED  <--------+
+[Refund] REQUESTED -> COMPLETED (amount: 3000)
    |
    v
-[Order] REFUNDED
+[Payment] CAPTURED (amount: 10000, refundedAmount: 3000)
+   |
+   | (부분환불 7000원 요청)
+   v
+[Refund] REQUESTED -> COMPLETED (amount: 7000)
+   |
+   v
+[Payment] REFUNDED (amount: 10000, refundedAmount: 10000)
 ```
 
-### 취소/환불 분기
-
-#### 결제 전 취소
-```
-Order.CREATED -> Order.CANCELED
-(Payment 없거나 Payment READY 취소)
-```
-
-#### 결제 후 환불
-```
-Payment.CAPTURED -> Payment.REFUNDED
-Order.PAID -> Order.REFUNDED
-Settlement.PENDING/CONFIRMED -> Settlement.CANCELED
-```
-
-## 🗂️ 프로젝트 구조
+### 정산 확정 후 환불 시 조정 생성
 
 ```
-lemuel/
-├── src/main/java/github/lms/lemuel/
-│   ├── LemuelApplication.java          # 메인 애플리케이션 (@EnableScheduling)
-│   ├── batch/
-│   │   └── SettlementBatchService.java # 일 단위 정산 배치 작업
-│   ├── config/
-│   │   ├── JwtProperties.java          # JWT 설정 프로퍼티
-│   │   └── JwtUtil.java                # JWT 토큰 생성/검증
-│   ├── security/
-│   │   ├── SecurityConfig.java         # Spring Security 설정
-│   │   └── JwtAuthenticationFilter.java # JWT 인증 필터
-│   ├── controller/
-│   │   ├── AuthController.java         # 인증 API (/auth/login)
-│   │   ├── UserController.java         # 사용자 API (/users)
-│   │   ├── OrderController.java        # 주문 API (/orders)
-│   │   └── PaymentController.java      # 결제 API (/payments)
-│   ├── domain/
-│   │   ├── User.java                   # 사용자 엔티티
-│   │   ├── Order.java                  # 주문 엔티티
-│   │   ├── Payment.java                # 결제 엔티티
-│   │   └── Settlement.java             # 정산 엔티티
-│   ├── repository/
-│   │   ├── UserRepository.java         # 사용자 Repository
-│   │   ├── OrderRepository.java        # 주문 Repository
-│   │   ├── PaymentRepository.java      # 결제 Repository
-│   │   └── SettlementRepository.java   # 정산 Repository
-│   └── dto/
-│       ├── LoginRequest/Response.java  # 로그인 DTO
-│       ├── UserRegisterRequest/Response.java  # 사용자 DTO
-│       ├── OrderCreateRequest/Response.java   # 주문 DTO
-│       └── PaymentRequest/Response.java       # 결제 DTO
-├── src/main/resources/
-│   ├── application.yml                 # 애플리케이션 설정
-│   └── db/migration/
-│       ├── V1__init.sql                # 사용자 테이블 생성
-│       └── V2__create_order_payment_settlement.sql  # 주문/결제/정산 테이블
-├── docker-compose.yml                  # PostgreSQL Docker 설정
-└── build.gradle.kts                    # Gradle 빌드 설정
+[Settlement] CONFIRMED (amount: 10000)
+   |
+   | (환불 2000원 발생)
+   v
+[SettlementAdjustment] PENDING (amount: -2000, refund_id: ...)
+   |
+   | (새벽 3시 10분 배치)
+   v
+[SettlementAdjustment] CONFIRMED
 ```
 
-## 🔧 기술 스택
+## 📊 데이터베이스 스키마 (v0.2.0)
 
-### Backend
-- **Spring Boot 3.5.10**
-  - Spring Web
-  - Spring Security
-  - Spring Data JPA
-  - Spring Validation
-  - Spring Actuator
-
-### Database
-- **PostgreSQL 17**
-- **Flyway** (DB 마이그레이션)
-
-### Security
-- **JWT (JSON Web Token)** - `io.jsonwebtoken:jjwt:0.12.5`
-- **BCrypt** (비밀번호 암호화)
-
-### Documentation
-- **SpringDoc OpenAPI** - Swagger UI
-
-## 📊 데이터베이스 스키마
-
-### users 테이블
-```sql
-CREATE TABLE users (
-    id BIGSERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'USER' NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW() NOT NULL
-);
-```
-
-### orders 테이블
-```sql
-CREATE TABLE orders (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'CREATED',
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-```
-
-### payments 테이블
+### payments 테이블 (변경)
 ```sql
 CREATE TABLE payments (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
+    refunded_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,  -- 신규
     status VARCHAR(20) NOT NULL DEFAULT 'READY',
     payment_method VARCHAR(50),
     pg_transaction_id VARCHAR(100),
+    captured_at TIMESTAMP,                              -- 신규
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    FOREIGN KEY (order_id) REFERENCES orders(id)
+    CONSTRAINT chk_payments_refunded_amount
+        CHECK (refunded_amount >= 0 AND refunded_amount <= amount)
 );
 ```
 
-### settlements 테이블 (정산 최소 스키마)
+### refunds 테이블 (신규)
 ```sql
-CREATE TABLE settlements (
+CREATE TABLE refunds (
     id BIGSERIAL PRIMARY KEY,
     payment_id BIGINT NOT NULL,
-    order_id BIGINT NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    settlement_date DATE NOT NULL,          -- 정산 기준일
-    confirmed_at TIMESTAMP,                 -- 확정 시각
+    status VARCHAR(20) NOT NULL DEFAULT 'REQUESTED',
+    reason TEXT,
+    idempotency_key VARCHAR(255) NOT NULL,
+    requested_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    FOREIGN KEY (payment_id) REFERENCES payments(id),
-    FOREIGN KEY (order_id) REFERENCES orders(id)
+    CONSTRAINT fk_refund_payment FOREIGN KEY (payment_id) REFERENCES payments(id),
+    CONSTRAINT chk_refunds_amount CHECK (amount > 0)
 );
+
+-- 멱등성 보장: 동일 payment + idempotency_key 중복 방지
+CREATE UNIQUE INDEX idx_refunds_payment_idempotency
+ON refunds(payment_id, idempotency_key);
 ```
 
-## 🔍 인덱스 및 제약조건
-
-### 핵심 제약조건
+### settlement_adjustments 테이블 (신규)
 ```sql
--- 1. order_id는 하나의 활성 결제만 가능 (1:1 관계)
-CREATE UNIQUE INDEX idx_payments_order_id_unique
-ON payments(order_id)
-WHERE status IN ('READY', 'AUTHORIZED', 'CAPTURED');
-
--- 2. payment_id는 unique (하나의 결제에 하나의 정산)
-CREATE UNIQUE INDEX idx_settlements_payment_id_unique
-ON settlements(payment_id);
-```
-
-### 성능 최적화 인덱스
-```sql
--- 배치 작업용 복합 인덱스
-CREATE INDEX idx_payments_status_updated_at ON payments(status, updated_at);
-CREATE INDEX idx_settlements_date_status ON settlements(settlement_date, status);
-
--- 조회 최적화
-CREATE INDEX idx_orders_user_id ON orders(user_id);
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_payments_order_id ON payments(order_id);
-CREATE INDEX idx_settlements_settlement_date ON settlements(settlement_date);
-```
-
-### 배치 실행 이력 (선택사항)
-```sql
-CREATE TABLE batch_run_history (
+CREATE TABLE settlement_adjustments (
     id BIGSERIAL PRIMARY KEY,
-    batch_name VARCHAR(100) NOT NULL,
-    run_id VARCHAR(100) NOT NULL,           -- 배치 실행 고유 ID
-    target_date DATE NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    started_at TIMESTAMP NOT NULL,
-    completed_at TIMESTAMP,
-    processed_count INT DEFAULT 0,
-    error_message TEXT
+    settlement_id BIGINT NOT NULL,
+    refund_id BIGINT NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    adjustment_date DATE NOT NULL,
+    confirmed_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_adjustment_settlement FOREIGN KEY (settlement_id) REFERENCES settlements(id),
+    CONSTRAINT fk_adjustment_refund FOREIGN KEY (refund_id) REFERENCES refunds(id),
+    CONSTRAINT chk_adjustments_amount CHECK (amount < 0)
 );
 
-CREATE INDEX idx_batch_history_run_id ON batch_run_history(run_id);
-CREATE INDEX idx_batch_history_target_date ON batch_run_history(target_date);
+-- 환불 1건당 조정 1건 보장
+CREATE UNIQUE INDEX idx_adjustments_refund_id_unique
+ON settlement_adjustments(refund_id);
 ```
 
 ## 🚀 시작하기
@@ -315,183 +279,89 @@ GRANT ALL PRIVILEGES ON DATABASE opslab TO inter;
 
 ## 📡 API 엔드포인트
 
-### 인증 API
+### 환불 API (v0.2.0 업데이트)
 
-#### 1. 회원가입
+#### 1. 환불 요청 (통합 API)
 ```http
-POST /users
+POST /refunds/{paymentId}
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
 Content-Type: application/json
 
 {
-  "email": "user@example.com",
-  "password": "password123"
+  "amount": 5000.00,
+  "reason": "고객 요청"
 }
 ```
 
-#### 2. 로그인
-```http
-POST /auth/login
-Content-Type: application/json
-
+**응답**:
+```json
 {
-  "email": "user@example.com",
-  "password": "password123"
+  "refundId": 1,
+  "paymentId": 1,
+  "refundAmount": 5000.00,
+  "refundStatus": "COMPLETED",
+  "reason": "고객 요청",
+  "requestedAt": "2026-02-10T10:00:00",
+  "completedAt": "2026-02-10T10:00:01",
+  "paymentAmount": 10000.00,
+  "refundedAmount": 5000.00,
+  "refundableAmount": 5000.00,
+  "paymentStatus": "CAPTURED"
 }
 ```
 
-#### 3. 내 정보 조회
-```http
-GET /users/me
-Authorization: Bearer {JWT_TOKEN}
-```
-
-### 주문 API
-
-#### 1. 주문 생성
-```http
-POST /orders
-Content-Type: application/json
-
-{
-  "userId": 1,
-  "amount": 10000.00
-}
-```
-
-#### 2. 주문 조회
-```http
-GET /orders/{orderId}
-```
-
-#### 3. 사용자별 주문 목록
-```http
-GET /orders/user/{userId}
-```
-
-#### 4. 주문 취소 (결제 전)
-```http
-PATCH /orders/{orderId}/cancel
-```
-
-### 결제 API
-
-#### 1. 결제 생성
-```http
-POST /payments
-Content-Type: application/json
-
-{
-  "orderId": 1,
-  "paymentMethod": "CARD"
-}
-```
-
-#### 2. 결제 승인
-```http
-PATCH /payments/{paymentId}/authorize
-```
-
-#### 3. 결제 확정 (매입)
-```http
-PATCH /payments/{paymentId}/capture
-```
-
-#### 4. 환불
-```http
-PATCH /payments/{paymentId}/refund
-```
-
-### 환불 API
-
-#### 1. 전체 환불 (Full Refund)
+#### 2. 전체 환불 (기존 API 호환)
 ```http
 POST /refunds/full/{paymentId}
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440001
 ```
-- Payment: CAPTURED → REFUNDED
-- Order: PAID → REFUNDED
-- Settlement: PENDING/CONFIRMED → CANCELED
+- Payment: refundedAmount = amount, status = REFUNDED
+- Refund 레코드 생성 (amount = 환불 가능 금액 전체)
 
-#### 2. 부분 환불 (Partial Refund)
+#### 3. 부분 환불 (기존 API 호환)
 ```http
 POST /refunds/partial/{paymentId}?refundAmount=5000.00
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440002
 ```
-- 음수 Payment 레코드 생성 (환불 금액)
-- Order: PAID 유지
-- Settlement: 금액 조정
+- Payment: refundedAmount 누적, status = CAPTURED 유지
+- Refund 레코드 생성 (amount = 요청 금액)
 
-#### 3. 결제 실패 환불 (Failed Payment Refund)
+#### 4. 결제 실패 환불 (취소)
 ```http
 POST /refunds/failed/{paymentId}
 ```
 - Payment: AUTHORIZED/FAILED → CANCELED
-- Order: CREATED 유지 (재결제 가능)
-- Settlement: 없음
+- Idempotency-Key 불필요 (환불 아님)
+
+### 오류 응답
+
+**초과 환불 시도 (409 Conflict)**:
+```json
+{
+  "timestamp": "2026-02-10T10:00:00",
+  "status": 409,
+  "error": "Conflict",
+  "errorCode": "REFUND_EXCEEDS_PAYMENT",
+  "message": "환불 가능 금액을 초과했습니다. 환불 가능: 3000.00, 요청: 5000.00"
+}
+```
+
+**Idempotency-Key 누락 (400 Bad Request)**:
+```json
+{
+  "timestamp": "2026-02-10T10:00:00",
+  "status": 400,
+  "error": "Bad Request",
+  "errorCode": "MISSING_IDEMPOTENCY_KEY",
+  "message": "Idempotency-Key 헤더는 필수입니다."
+}
+```
 
 ### 정산 배치 작업
 
-#### Pseudo Code 흐름:
-
-**1. 대상 조회 (매일 새벽 2시)**
-```
-BEGIN TRANSACTION
-  targetDate = yesterday
-  payments = SELECT * FROM payments
-             WHERE status = 'CAPTURED'
-             AND updated_at BETWEEN targetDate 00:00:00 AND 23:59:59
-
-  FOR EACH payment IN payments:
-    IF NOT EXISTS settlement WHERE payment_id = payment.id:
-      INSERT INTO settlements (payment_id, order_id, amount, status, settlement_date)
-      VALUES (payment.id, payment.order_id, payment.amount, 'PENDING', targetDate)
-  END FOR
-COMMIT
-```
-
-**2. 정산 확정 (매일 새벽 3시)**
-```
-BEGIN TRANSACTION
-  targetDate = yesterday
-  settlements = SELECT * FROM settlements
-                WHERE settlement_date = targetDate AND status = 'PENDING'
-
-  FOR EACH settlement IN settlements:
-    UPDATE settlements
-    SET status = 'CONFIRMED', confirmed_at = NOW()
-    WHERE id = settlement.id
-  END FOR
-COMMIT
-```
-
-- **매일 새벽 2시**: 전날 `CAPTURED` 상태의 결제를 `PENDING` 정산 대상으로 생성
-- **매일 새벽 3시**: 전날 생성된 `PENDING` 정산을 `CONFIRMED`로 확정
-
-## 📖 Swagger UI
-
-애플리케이션 실행 후 다음 URL에서 API 문서를 확인할 수 있습니다:
-
-```
-http://localhost:8080/swagger-ui.html
-```
-
-## 🔐 JWT 설정
-
-`application.yml`에서 JWT 설정을 확인할 수 있습니다:
-
-```yaml
-app:
-  jwt:
-    issuer: lemuel-ops-lab
-    secret: ops-lab-super-secret-key-must-be-at-least-32-chars-long-for-hmac
-    ttl-seconds: 86400  # 24시간
-```
-
-## 📊 모니터링
-
-Spring Actuator를 통해 애플리케이션 상태를 확인할 수 있습니다:
-
-- Health: `http://localhost:8080/actuator/health`
-- Info: `http://localhost:8080/actuator/info`
-- Metrics: `http://localhost:8080/actuator/metrics`
+- **매일 새벽 2시**: 전날 `CAPTURED` 결제 → `PENDING` 정산 생성
+- **매일 새벽 3시**: `PENDING` 정산 → `CONFIRMED` 확정
+- **매일 새벽 3시 10분**: `PENDING` 정산 조정 → `CONFIRMED` 확정 (v0.2.0)
 
 ## 🧪 테스트
 
@@ -499,33 +369,51 @@ Spring Actuator를 통해 애플리케이션 상태를 확인할 수 있습니�
 ./gradlew test
 ```
 
-## 📝 환경 변수
+### 통합 테스트 시나리오
 
-개발 환경에서는 `application.yml`에 설정되어 있습니다.
-프로덕션 환경에서는 다음 환경 변수를 설정하세요:
+1. **부분환불 2회 누적**: refundedAmount 10000, status REFUNDED
+2. **초과환불 시도**: RefundExceedsPaymentException (409)
+3. **멱등성 키 재사용**: 동일 Refund 레코드 반환
+4. **CONFIRMED 정산 후 환불**: SettlementAdjustment 생성
+5. **PENDING 정산 후 환불**: Settlement 금액 직접 차감
+6. **잘못된 상태 환불**: InvalidPaymentStateException (409)
 
-- `SPRING_DATASOURCE_URL`: 데이터베이스 URL
-- `SPRING_DATASOURCE_USERNAME`: DB 사용자명
-- `SPRING_DATASOURCE_PASSWORD`: DB 비밀번호
-- `APP_JWT_SECRET`: JWT 비밀키
-- `APP_JWT_TTL_SECONDS`: JWT 만료 시간(초)
+## 📝 검증 체크리스트
+
+### DB 제약
+- ✅ `payments.refunded_amount` CHECK (0 ~ amount)
+- ✅ `refunds(payment_id, idempotency_key)` UNIQUE
+- ✅ `settlement_adjustments(refund_id)` UNIQUE
+- ✅ `refunds.amount` CHECK (> 0)
+- ✅ `settlement_adjustments.amount` CHECK (< 0)
+
+### 멱등성
+- ✅ 동일 `Idempotency-Key` 재요청 시 동일 Refund 반환
+- ✅ 환불 금액 중복 반영 방지
+
+### 동시성
+- ✅ `PESSIMISTIC_WRITE` lock으로 동시 환불 요청 직렬화
+- ✅ `refundedAmount` 초과 방지
+
+### 배치 재실행
+- ✅ Settlement 중복 생성 방지 (`findByPaymentId` 체크)
+- ✅ Adjustment 중복 생성 방지 (`findByRefundId` 체크)
 
 ## 🐛 트러블슈팅
 
-### "데이터베이스 'opslab'이 없습니다" 에러
+### SpringDoc OpenAPI ClassNotFoundException 오류
 ```bash
-psql -U postgres -c "CREATE DATABASE opslab;"
+# build.gradle.kts에 kotlin-reflect 추가됨
+implementation("org.jetbrains.kotlin:kotlin-reflect")
 ```
 
-### 사용자 권한 에러
-```sql
-GRANT ALL PRIVILEGES ON DATABASE opslab TO inter;
-```
-
-### 포트 충돌 (5432)
+### Idempotency-Key 누락
 ```bash
-docker-compose down
-docker-compose up -d
+# 환불 API 호출 시 반드시 헤더 포함
+curl -X POST http://localhost:8080/refunds/1 \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 5000.00, "reason": "고객 요청"}'
 ```
 
 ## 📄 라이선스

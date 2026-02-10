@@ -2,8 +2,10 @@ package github.lms.lemuel.batch;
 
 import github.lms.lemuel.domain.Payment;
 import github.lms.lemuel.domain.Settlement;
+import github.lms.lemuel.domain.SettlementAdjustment;
 import github.lms.lemuel.repository.PaymentRepository;
 import github.lms.lemuel.repository.SettlementRepository;
+import github.lms.lemuel.repository.SettlementAdjustmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -58,10 +60,14 @@ public class SettlementBatchService {
 
     private final PaymentRepository paymentRepository;
     private final SettlementRepository settlementRepository;
+    private final SettlementAdjustmentRepository settlementAdjustmentRepository;
 
-    public SettlementBatchService(PaymentRepository paymentRepository, SettlementRepository settlementRepository) {
+    public SettlementBatchService(PaymentRepository paymentRepository,
+                                  SettlementRepository settlementRepository,
+                                  SettlementAdjustmentRepository settlementAdjustmentRepository) {
         this.paymentRepository = paymentRepository;
         this.settlementRepository = settlementRepository;
+        this.settlementAdjustmentRepository = settlementAdjustmentRepository;
     }
 
     /**
@@ -133,5 +139,31 @@ public class SettlementBatchService {
         }
 
         logger.info("정산 확정 배치 완료: {} 건 확정됨", confirmedCount);
+    }
+
+    /**
+     * 매일 새벽 3시 10분에 PENDING 상태의 정산 조정을 CONFIRMED로 확정
+     * "0 10 3 * * *" = 매일 3시 10분 0초
+     */
+    @Scheduled(cron = "0 10 3 * * *")
+    @Transactional
+    public void confirmDailySettlementAdjustments() {
+        LocalDate yesterday = LocalDate.now().minusDays(1);
+
+        logger.info("정산 조정 확정 배치 시작: adjustmentDate={}", yesterday);
+
+        List<SettlementAdjustment> pendingAdjustments =
+                settlementAdjustmentRepository.findPendingByAdjustmentDate(yesterday);
+
+        int confirmedCount = 0;
+        for (SettlementAdjustment adjustment : pendingAdjustments) {
+            adjustment.setStatus(SettlementAdjustment.AdjustmentStatus.CONFIRMED);
+            adjustment.setConfirmedAt(LocalDateTime.now());
+            settlementAdjustmentRepository.save(adjustment);
+            confirmedCount++;
+            logger.debug("정산 조정 확정: adjustmentId={}, amount={}", adjustment.getId(), adjustment.getAmount());
+        }
+
+        logger.info("정산 조정 확정 배치 완료: {} 건 확정됨", confirmedCount);
     }
 }

@@ -1,25 +1,30 @@
 package github.lms.lemuel.service;
 
-import github.lms.lemuel.domain.Order;
 import github.lms.lemuel.domain.Payment;
-import github.lms.lemuel.domain.Settlement;
-import github.lms.lemuel.repository.OrderRepository;
+import github.lms.lemuel.domain.Refund;
+import github.lms.lemuel.exception.InvalidPaymentStateException;
+import github.lms.lemuel.exception.RefundExceedsPaymentException;
 import github.lms.lemuel.repository.PaymentRepository;
-import github.lms.lemuel.repository.SettlementRepository;
+import github.lms.lemuel.repository.RefundRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 /**
- * 환불 처리 서비스
+ * 환불 처리 서비스 (리팩토링 버전)
  *
- * 환불 시나리오 3가지:
- * 1. 전체 환불 (Full Refund)
- * 2. 부분 환불 (Partial Refund)
- * 3. 결제 실패 환불 (Failed Payment Refund)
+ * 핵심 원칙:
+ * 1. Payment는 원 결제를 대표하는 단일 레코드 (음수 레코드 생성 금지)
+ * 2. 환불은 Refund 엔티티로 분리하여 관리
+ * 3. 멱등성 보장: Idempotency-Key 기반
+ * 4. 동시성 제어: Payment row-level lock (PESSIMISTIC_WRITE)
+ * 5. 환불 누적 합계는 Payment.refundedAmount에 저장
  */
 @Service
 public class RefundService {
@@ -27,134 +32,139 @@ public class RefundService {
     private static final Logger logger = LoggerFactory.getLogger(RefundService.class);
 
     private final PaymentRepository paymentRepository;
-    private final OrderRepository orderRepository;
-    private final SettlementRepository settlementRepository;
+    private final RefundRepository refundRepository;
+    private final SettlementAdjustmentService adjustmentService;
+    private final EntityManager entityManager;
 
-    public RefundService(PaymentRepository paymentRepository, OrderRepository orderRepository, SettlementRepository settlementRepository) {
+    public RefundService(PaymentRepository paymentRepository,
+                         RefundRepository refundRepository,
+                         SettlementAdjustmentService adjustmentService,
+                         EntityManager entityManager) {
         this.paymentRepository = paymentRepository;
-        this.orderRepository = orderRepository;
-        this.settlementRepository = settlementRepository;
+        this.refundRepository = refundRepository;
+        this.adjustmentService = adjustmentService;
+        this.entityManager = entityManager;
     }
 
     /**
-     * 시나리오 1: 전체 환불 (Full Refund)
-     *
-     * 규칙:
-     * - Payment.status: CAPTURED -> REFUNDED
-     * - Order.status: PAID -> REFUNDED
-     * - Settlement.status: PENDING/CONFIRMED -> CANCELED
-     * - 환불 금액 = 결제 금액 전체
-     *
-     * @param paymentId 결제 ID
-     * @return 환불 처리된 결제 객체
-     */
-    @Transactional
-    public Payment processFullRefund(Long paymentId) {
-        logger.info("전체 환불 처리 시작: paymentId={}", paymentId);
-
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
-
-        // 유효성 검사: CAPTURED 상태만 환불 가능
-        if (payment.getStatus() != Payment.PaymentStatus.CAPTURED) {
-            throw new RuntimeException("Only CAPTURED payments can be refunded. Current status: " + payment.getStatus());
-        }
-
-        // 1. Payment 상태 변경: CAPTURED -> REFUNDED
-        payment.setStatus(Payment.PaymentStatus.REFUNDED);
-        paymentRepository.save(payment);
-
-        // 2. Order 상태 변경: PAID -> REFUNDED
-        Order order = orderRepository.findById(payment.getOrderId())
-                .orElseThrow(() -> new RuntimeException("Order not found: " + payment.getOrderId()));
-        order.setStatus(Order.OrderStatus.REFUNDED);
-        orderRepository.save(order);
-
-        // 3. Settlement 상태 변경: PENDING/CONFIRMED -> CANCELED
-        settlementRepository.findByPaymentId(paymentId).ifPresent(settlement -> {
-            settlement.setStatus(Settlement.SettlementStatus.CANCELED);
-            settlementRepository.save(settlement);
-            logger.info("정산 취소 처리: settlementId={}", settlement.getId());
-        });
-
-        logger.info("전체 환불 처리 완료: paymentId={}, amount={}", paymentId, payment.getAmount());
-        return payment;
-    }
-
-    /**
-     * 시나리오 2: 부분 환불 (Partial Refund)
-     *
-     * 규칙:
-     * - 원본 Payment는 CAPTURED 유지 (amount는 환불 후 금액으로 조정)
-     * - 새로운 Payment 레코드 생성 (음수 금액, REFUNDED 상태)
-     * - Order.status: PAID 유지 (부분 환불은 주문 자체는 유효)
-     * - Settlement: 환불 금액만큼 차감된 새 Settlement 생성 또는 금액 조정
-     *
-     * 주의: 이 구현은 간단한 버전이며, 실제로는 환불 이력 테이블을 별도로 관리하는 것이 권장됨
+     * 환불 생성 (부분/전체 환불 통합)
      *
      * @param paymentId 결제 ID
      * @param refundAmount 환불 금액
-     * @return 환불 처리 결과
+     * @param idempotencyKey 멱등성 키
+     * @param reason 환불 사유
+     * @return 생성/조회된 환불 레코드
      */
     @Transactional
-    public Payment processPartialRefund(Long paymentId, BigDecimal refundAmount) {
-        logger.info("부분 환불 처리 시작: paymentId={}, refundAmount={}", paymentId, refundAmount);
+    public Refund createRefund(Long paymentId, BigDecimal refundAmount, String idempotencyKey, String reason) {
+        logger.info("환불 처리 시작: paymentId={}, amount={}, idempotencyKey={}", paymentId, refundAmount, idempotencyKey);
 
-        Payment originalPayment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
-
-        // 유효성 검사
-        if (originalPayment.getStatus() != Payment.PaymentStatus.CAPTURED) {
-            throw new RuntimeException("Only CAPTURED payments can be refunded");
+        // 1. 멱등성 체크: 동일 키로 이미 환불 요청이 있으면 재사용
+        Optional<Refund> existingRefund = refundRepository.findByPaymentIdAndIdempotencyKey(paymentId, idempotencyKey);
+        if (existingRefund.isPresent()) {
+            logger.info("멱등성 키 재사용: refundId={}, idempotencyKey={}", existingRefund.get().getId(), idempotencyKey);
+            return existingRefund.get();
         }
 
-        if (refundAmount.compareTo(originalPayment.getAmount()) > 0) {
-            throw new RuntimeException("Refund amount cannot exceed payment amount");
+        // 2. Payment row-level lock 획득 (동시성 제어)
+        Payment payment = entityManager.find(Payment.class, paymentId, LockModeType.PESSIMISTIC_WRITE);
+        if (payment == null) {
+            throw new RuntimeException("Payment not found: " + paymentId);
         }
 
-        if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Refund amount must be positive");
-        }
+        // 3. 유효성 검사
+        validateRefundRequest(payment, refundAmount);
 
-        // 전체 환불과 동일한 금액이면 전체 환불로 처리
-        if (refundAmount.compareTo(originalPayment.getAmount()) == 0) {
-            return processFullRefund(paymentId);
-        }
+        // 4. Refund 레코드 생성
+        Refund refund = new Refund();
+        refund.setPaymentId(paymentId);
+        refund.setAmount(refundAmount);
+        refund.setStatus(Refund.RefundStatus.REQUESTED);
+        refund.setIdempotencyKey(idempotencyKey);
+        refund.setReason(reason);
+        refundRepository.save(refund);
 
-        // 1. 환불 금액에 해당하는 음수 Payment 레코드 생성
-        Payment refundPayment = new Payment();
-        refundPayment.setOrderId(originalPayment.getOrderId());
-        refundPayment.setAmount(refundAmount.negate()); // 음수로 저장
-        refundPayment.setStatus(Payment.PaymentStatus.REFUNDED);
-        refundPayment.setPaymentMethod(originalPayment.getPaymentMethod());
-        refundPayment.setPgTransactionId("REFUND-" + originalPayment.getPgTransactionId());
-        paymentRepository.save(refundPayment);
+        // 5. 환불 완료 처리 (실제 PG 연동 시에는 비동기 처리)
+        completeRefund(refund, payment);
 
-        // 2. Order는 PAID 상태 유지 (부분 환불)
-
-        // 3. Settlement 조정: 환불 금액만큼 차감
-        settlementRepository.findByPaymentId(paymentId).ifPresent(settlement -> {
-            BigDecimal adjustedAmount = settlement.getAmount().subtract(refundAmount);
-            settlement.setAmount(adjustedAmount);
-            settlementRepository.save(settlement);
-            logger.info("정산 금액 조정: settlementId={}, newAmount={}", settlement.getId(), adjustedAmount);
-        });
-
-        logger.info("부분 환불 처리 완료: paymentId={}, refundAmount={}", paymentId, refundAmount);
-        return refundPayment;
+        logger.info("환불 처리 완료: refundId={}, paymentId={}, amount={}", refund.getId(), paymentId, refundAmount);
+        return refund;
     }
 
     /**
-     * 시나리오 3: 결제 실패 환불 (Failed Payment Refund)
-     *
-     * 규칙:
-     * - 결제 승인(AUTHORIZED) 후 매입(CAPTURE) 실패 시 발생
-     * - Payment.status: AUTHORIZED -> CANCELED
-     * - Order.status: CREATED 유지 (결제가 완료되지 않음)
-     * - Settlement: 생성되지 않음 (매입되지 않았으므로)
-     *
-     * @param paymentId 결제 ID
-     * @return 취소 처리된 결제 객체
+     * 환불 완료 처리
+     */
+    @Transactional
+    public void completeRefund(Refund refund, Payment payment) {
+        // Refund 상태 업데이트
+        refund.setStatus(Refund.RefundStatus.COMPLETED);
+        refundRepository.save(refund);
+
+        // Payment 환불 누적 금액 업데이트
+        BigDecimal newRefundedAmount = payment.getRefundedAmount().add(refund.getAmount());
+        payment.setRefundedAmount(newRefundedAmount);
+
+        // 전액 환불 시 Payment 상태 변경
+        if (payment.isFullyRefunded()) {
+            payment.setStatus(Payment.PaymentStatus.REFUNDED);
+            logger.info("전액 환불 완료: paymentId={}", payment.getId());
+        }
+
+        paymentRepository.save(payment);
+
+        // 정산 조정 처리
+        adjustmentService.createAdjustmentForRefund(refund);
+    }
+
+    /**
+     * 환불 요청 유효성 검사
+     */
+    private void validateRefundRequest(Payment payment, BigDecimal refundAmount) {
+        // 상태 검사
+        if (payment.getStatus() != Payment.PaymentStatus.CAPTURED) {
+            throw new InvalidPaymentStateException(
+                    String.format("CAPTURED 상태의 결제만 환불 가능합니다. 현재 상태: %s", payment.getStatus()));
+        }
+
+        // 금액 검사
+        if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("환불 금액은 0보다 커야 합니다.");
+        }
+
+        // 초과 환불 방지
+        BigDecimal refundableAmount = payment.getRefundableAmount();
+        if (refundAmount.compareTo(refundableAmount) > 0) {
+            throw new RefundExceedsPaymentException(
+                    String.format("환불 가능 금액을 초과했습니다. 환불 가능: %s, 요청: %s",
+                            refundableAmount, refundAmount));
+        }
+    }
+
+    /**
+     * 전체 환불 (기존 API 호환)
+     */
+    @Transactional
+    public Payment processFullRefund(Long paymentId, String idempotencyKey) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new RuntimeException("Payment not found: " + paymentId));
+
+        BigDecimal refundableAmount = payment.getRefundableAmount();
+        createRefund(paymentId, refundableAmount, idempotencyKey, "전체 환불");
+
+        return paymentRepository.findById(paymentId).orElseThrow();
+    }
+
+    /**
+     * 부분 환불 (기존 API 호환)
+     */
+    @Transactional
+    public Payment processPartialRefund(Long paymentId, BigDecimal refundAmount, String idempotencyKey) {
+        createRefund(paymentId, refundAmount, idempotencyKey, "부분 환불");
+        return paymentRepository.findById(paymentId).orElseThrow();
+    }
+
+    /**
+     * 결제 실패 환불 (취소)
      */
     @Transactional
     public Payment processFailedPaymentRefund(Long paymentId) {
@@ -166,25 +176,12 @@ public class RefundService {
         // 유효성 검사: AUTHORIZED 또는 FAILED 상태만 취소 가능
         if (payment.getStatus() != Payment.PaymentStatus.AUTHORIZED
                 && payment.getStatus() != Payment.PaymentStatus.FAILED) {
-            throw new RuntimeException("Only AUTHORIZED or FAILED payments can be canceled. Current status: " + payment.getStatus());
+            throw new InvalidPaymentStateException(
+                    "AUTHORIZED 또는 FAILED 상태의 결제만 취소 가능합니다. 현재 상태: " + payment.getStatus());
         }
 
-        // 1. Payment 상태 변경: AUTHORIZED/FAILED -> CANCELED
         payment.setStatus(Payment.PaymentStatus.CANCELED);
         paymentRepository.save(payment);
-
-        // 2. Order는 CREATED 상태 유지 (재결제 가능)
-        Order order = orderRepository.findById(payment.getOrderId())
-                .orElseThrow(() -> new RuntimeException("Order not found: " + payment.getOrderId()));
-
-        if (order.getStatus() != Order.OrderStatus.CREATED) {
-            logger.warn("Order 상태가 CREATED가 아님: orderId={}, status={}", order.getId(), order.getStatus());
-        }
-
-        // 3. Settlement은 존재하지 않음 (CAPTURED 되지 않았으므로)
-        settlementRepository.findByPaymentId(paymentId).ifPresent(settlement -> {
-            logger.warn("AUTHORIZED 상태인데 Settlement이 존재함 (비정상): settlementId={}", settlement.getId());
-        });
 
         logger.info("결제 실패 환불(취소) 처리 완료: paymentId={}", paymentId);
         return payment;

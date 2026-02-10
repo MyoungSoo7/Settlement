@@ -18,6 +18,9 @@ public class Payment {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
+    @Column(name = "refunded_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PaymentStatus status = PaymentStatus.READY;
@@ -27,6 +30,9 @@ public class Payment {
 
     @Column(name = "pg_transaction_id", length = 100)
     private String pgTransactionId;
+
+    @Column(name = "captured_at")
+    private LocalDateTime capturedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -125,5 +131,36 @@ public class Payment {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public BigDecimal getRefundedAmount() {
+        return refundedAmount;
+    }
+
+    public void setRefundedAmount(BigDecimal refundedAmount) {
+        this.refundedAmount = refundedAmount;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public LocalDateTime getCapturedAt() {
+        return capturedAt;
+    }
+
+    public void setCapturedAt(LocalDateTime capturedAt) {
+        this.capturedAt = capturedAt;
+    }
+
+    /**
+     * 환불 가능 금액 계산
+     */
+    public BigDecimal getRefundableAmount() {
+        return amount.subtract(refundedAmount);
+    }
+
+    /**
+     * 전액 환불 여부
+     */
+    public boolean isFullyRefunded() {
+        return refundedAmount.compareTo(amount) >= 0;
     }
 }
