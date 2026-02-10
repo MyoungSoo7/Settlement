@@ -3,6 +3,8 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
+    env_file:
+      - .env
     container_name: lemuel-postgres
     environment:
       POSTGRES_DB: inter

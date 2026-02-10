@@ -4,8 +4,8 @@ spring:
 
   datasource:
     url: jdbc:postgresql://localhost:5432/opslab
-    username: inter
-    password: 1234
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -40,8 +40,8 @@ springdoc:
 
 app:
   jwt:
-    issuer: lemuel-ops-lab
-    secret: ops-lab-super-secret-key-must-be-at-least-32-chars-long-for-hmac
+    issuer: ${JWT_ISSUER}
+    secret: ${JWT_SECRET}
     ttl-seconds: 86400
 
 
