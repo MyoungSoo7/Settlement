@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: lemuel
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/opslab
+    username: inter
+    password: 1234
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: opslab
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: opslab
+    default-schema: opslab
+    create-schemas: true
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+
+app:
+  jwt:
+    issuer: lemuel-ops-lab
+    secret: ops-lab-super-secret-key-must-be-at-least-32-chars-long-for-hmac
+    ttl-seconds: 86400
+
+
