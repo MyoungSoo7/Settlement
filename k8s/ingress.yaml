@@ -1,0 +1,46 @@
+# Ingress를 사용하려면 Ingress Controller가 필요합니다.
+# 단일 노드 환경에서는 NGINX Ingress Controller 설치 권장:
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/baremetal/deploy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lemuel-ingress
+  namespace: lemuel
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Rate Limiting (Optional)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    # Connection Timeout
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: lemuel.local  # /etc/hosts에 추가: <서버IP> lemuel.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lemuel-service
+                port:
+                  number: 8080
+
+          # Actuator 엔드포인트는 별도 경로로 제한 가능 (보안)
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: lemuel-service
+                port:
+                  number: 8080
+
+  # TLS 설정 (Let's Encrypt + cert-manager 사용 권장)
+  # tls:
+  #   - hosts:
+  #       - lemuel.local
+  #     secretName: lemuel-tls

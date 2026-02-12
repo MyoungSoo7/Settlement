@@ -40,19 +40,50 @@ spring:
     connection-timeout: 5s
     socket-timeout: 60s
 
+  # Graceful Shutdown for K8s Rolling Update
+  lifecycle:
+    timeout-per-shutdown-phase: 30s  # Pod 종료 시 최대 30초 대기
+
+  batch:
+    jdbc:
+      initialize-schema: always  # BATCH_* 테이블 자동 생성
+    job:
+      enabled: false  # 애플리케이션 시작 시 자동 실행 방지
+
+# Server Configuration
+server:
+  port: 8080
+  shutdown: graceful  # Graceful Shutdown 활성화
+  tomcat:
+    connection-timeout: 20s
+    threads:
+      max: 200
+      min-spare: 10
+
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
+      base-path: /actuator
   endpoint:
     health:
       show-details: always
       show-components: always
+      probes:
+        enabled: true  # K8s Liveness/Readiness Probe 활성화
   health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
     elasticsearch:
       enabled: false
+    db:
+      enabled: true  # PostgreSQL Health Check
+  server:
+    port: 8080  # Management 포트를 메인 포트와 동일하게 설정
   metrics:
     distribution:
       percentiles-histogram:
