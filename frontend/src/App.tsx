@@ -1,8 +1,11 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { authApi } from './api/auth';
+import Layout from './components/Layout';
 import Login from './pages/Login';
+import OrderPage from './pages/OrderPage';
 import SettlementDashboard from './pages/SettlementDashboard';
+import SettlementAdmin from './pages/SettlementAdmin';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -12,7 +15,23 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <Layout>{children}</Layout>;
+};
+
+// Admin Only Route
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const isAuthenticated = authApi.isAuthenticated();
+  const user = authApi.getCurrentUser();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.role !== 'ADMIN') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <Layout>{children}</Layout>;
 };
 
 function App() {
@@ -21,6 +40,14 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
+          path="/order"
+          element={
+            <ProtectedRoute>
+              <OrderPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
@@ -28,7 +55,15 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <SettlementAdmin />
+            </AdminRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/order" replace />} />
       </Routes>
     </BrowserRouter>
   );

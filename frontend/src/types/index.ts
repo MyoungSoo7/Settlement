@@ -15,13 +15,30 @@ export interface SettlementSearchRequest {
   ordererName?: string;
   productName?: string;
   isRefunded?: boolean;
-  status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED';
+  status?: 'CALCULATED' | 'WAITING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'PENDING' | 'CONFIRMED' | 'CANCELED';
   startDate?: string;
   endDate?: string;
   page?: number;
   size?: number;
   sortBy?: string;
   sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface SettlementDetail {
+  id: number;
+  paymentId: number;
+  orderId: number;
+  amount: number;
+  status: string;
+  settlementDate: string;
+  confirmedAt?: string;
+  approvedBy?: number;
+  approvedAt?: string;
+  rejectedBy?: number;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SettlementSearchItem {
