@@ -1,11 +1,16 @@
 package github.lms.lemuel.domain;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "refunds")
+@Getter
+@Setter
 public class Refund {
 
     @Id
@@ -20,25 +25,25 @@ public class Refund {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private RefundStatus status = RefundStatus.REQUESTED;
+    private RefundStatus status;
 
     @Column(columnDefinition = "TEXT")
     private String reason;
 
-    @Column(name = "idempotency_key", nullable = false, length = 255)
+    @Column(name = "idempotency_key", nullable = false)
     private String idempotencyKey;
 
     @Column(name = "requested_at", nullable = false)
-    private LocalDateTime requestedAt = LocalDateTime.now();
+    private LocalDateTime requestedAt;
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    private LocalDateTime updatedAt;
 
     public enum RefundStatus {
         REQUESTED,  // 환불 요청됨
@@ -69,88 +74,4 @@ public class Refund {
         updatedAt = LocalDateTime.now();
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getPaymentId() {
-        return paymentId;
-    }
-
-    public void setPaymentId(Long paymentId) {
-        this.paymentId = paymentId;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public RefundStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(RefundStatus status) {
-        this.status = status;
-        this.updatedAt = LocalDateTime.now();
-        if (status == RefundStatus.COMPLETED && this.completedAt == null) {
-            this.completedAt = LocalDateTime.now();
-        }
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getIdempotencyKey() {
-        return idempotencyKey;
-    }
-
-    public void setIdempotencyKey(String idempotencyKey) {
-        this.idempotencyKey = idempotencyKey;
-    }
-
-    public LocalDateTime getRequestedAt() {
-        return requestedAt;
-    }
-
-    public void setRequestedAt(LocalDateTime requestedAt) {
-        this.requestedAt = requestedAt;
-    }
-
-    public LocalDateTime getCompletedAt() {
-        return completedAt;
-    }
-
-    public void setCompletedAt(LocalDateTime completedAt) {
-        this.completedAt = completedAt;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

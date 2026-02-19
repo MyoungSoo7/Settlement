@@ -1,11 +1,16 @@
 package github.lms.lemuel.domain;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "payments")
+@Getter
+@Setter
 public class Payment {
 
     @Id
@@ -35,15 +40,15 @@ public class Payment {
     private LocalDateTime capturedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    private LocalDateTime updatedAt ;
 
     public enum PaymentStatus {
         READY,      // 결제 생성(요청 준비)
-        AUTHORIZED, // 승인됨(카드/간편결제 승인)
-        CAPTURED,   // 매입/확정(실 결제 완료)
+        AUTHORIZED, // PG승인됨(카드/간편결제 승인)
+        CAPTURED,   // 매입/확정(실 결제 완료->정산 대상)
         FAILED,     // 실패
         CANCELED,   // 승인 취소
         REFUNDED    // 환불
@@ -67,87 +72,10 @@ public class Payment {
         updatedAt = LocalDateTime.now();
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrderId() {
-        return orderId;
-    }
-
-    public void setOrderId(Long orderId) {
-        this.orderId = orderId;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public PaymentStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(PaymentStatus status) {
-        this.status = status;
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    public String getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public void setPaymentMethod(String paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
-
-    public String getPgTransactionId() {
-        return pgTransactionId;
-    }
-
-    public void setPgTransactionId(String pgTransactionId) {
-        this.pgTransactionId = pgTransactionId;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
-    public BigDecimal getRefundedAmount() {
-        return refundedAmount;
-    }
 
     public void setRefundedAmount(BigDecimal refundedAmount) {
         this.refundedAmount = refundedAmount;
         this.updatedAt = LocalDateTime.now();
-    }
-
-    public LocalDateTime getCapturedAt() {
-        return capturedAt;
-    }
-
-    public void setCapturedAt(LocalDateTime capturedAt) {
-        this.capturedAt = capturedAt;
     }
 
     /**

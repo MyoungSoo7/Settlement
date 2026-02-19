@@ -1,12 +1,17 @@
 package github.lms.lemuel.domain;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "settlements")
+@Getter
+@Setter
 public class Settlement {
 
     @Id
