@@ -1,6 +1,7 @@
 package github.lms.lemuel.payment.application;
 
 import github.lms.lemuel.payment.domain.Payment;
+import github.lms.lemuel.payment.domain.exception.PaymentNotFoundException;
 import github.lms.lemuel.payment.port.in.GetPaymentPort;
 import github.lms.lemuel.payment.port.out.LoadPaymentPort;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,6 @@ public class GetPaymentUseCase implements GetPaymentPort {
     @Override
     public Payment getPayment(Long paymentId) {
         return loadPaymentPort.loadById(paymentId)
-            .orElseThrow(() -> new IllegalArgumentException("Payment not found: " + paymentId));
+            .orElseThrow(() -> new PaymentNotFoundException(paymentId));
     }
 }
