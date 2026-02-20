@@ -1,12 +1,13 @@
 package github.lms.lemuel.service;
 
-import github.lms.lemuel.payment.domain.Payment;
+import github.lms.lemuel.payment.adapter.out.persistence.PaymentJpaEntity;
+import github.lms.lemuel.payment.adapter.out.persistence.PaymentJpaRepository;
+import github.lms.lemuel.payment.domain.PaymentStatus;
 import github.lms.lemuel.domain.Refund;
 import github.lms.lemuel.domain.Settlement;
 import github.lms.lemuel.domain.SettlementAdjustment;
 import github.lms.lemuel.common.exception.InvalidPaymentStateException;
 import github.lms.lemuel.common.exception.RefundExceedsPaymentException;
-import github.lms.lemuel.payment.adapter.out.persistence.PaymentRepository;
 import github.lms.lemuel.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +39,7 @@ class RefundServiceIntegrationTest {
     private RefundService refundService;
 
     @Autowired
-    private PaymentRepository paymentRepository;
+    private PaymentJpaRepository paymentRepository;
 
     @Autowired
     private RefundRepository refundRepository;
@@ -49,15 +50,15 @@ class RefundServiceIntegrationTest {
     @Autowired
     private SettlementAdjustmentRepository adjustmentRepository;
 
-    private Payment testPayment;
+    private PaymentJpaEntity testPayment;
 
     @BeforeEach
     void setUp() {
         // 테스트용 CAPTURED 결제 생성
-        testPayment = new Payment();
+        testPayment = new PaymentJpaEntity();
         testPayment.setOrderId(1L);
         testPayment.setAmount(new BigDecimal("10000.00"));
-        testPayment.setStatus(Payment.PaymentStatus.CAPTURED);
+        testPayment.setStatus("CAPTURED");
         testPayment.setPaymentMethod("CARD");
         testPayment.setPgTransactionId("PG-TEST-" + UUID.randomUUID());
         testPayment = paymentRepository.save(testPayment);
@@ -78,10 +79,10 @@ class RefundServiceIntegrationTest {
         assertThat(refund1.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
         assertThat(refund1.getAmount()).isEqualByComparingTo(new BigDecimal("3000.00"));
 
-        // Payment 확인: refundedAmount=3000, status=CAPTURED
-        Payment afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        // PaymentJpaEntity 확인: refundedAmount=3000, status=CAPTURED
+        PaymentJpaEntity afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(afterFirst.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("3000.00"));
-        assertThat(afterFirst.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+        assertThat(afterFirst.getStatus()).isEqualTo("CAPTURED");
         assertThat(afterFirst.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("7000.00"));
 
         // 두 번째 부분 환불: 7000원 (전액)
@@ -95,10 +96,10 @@ class RefundServiceIntegrationTest {
 
         assertThat(refund2.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
 
-        // Payment 확인: refundedAmount=10000, status=REFUNDED
-        Payment afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        // PaymentJpaEntity 확인: refundedAmount=10000, status=REFUNDED
+        PaymentJpaEntity afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(afterSecond.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
-        assertThat(afterSecond.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(afterSecond.getStatus()).isEqualTo("REFUNDED");
         assertThat(afterSecond.isFullyRefunded()).isTrue();
     }
 
@@ -144,7 +145,7 @@ class RefundServiceIntegrationTest {
         assertThat(refund1.getIdempotencyKey()).isEqualTo(idempotencyKey);
 
         // Payment의 refundedAmount는 1회만 반영
-        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(payment.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("5000.00"));
     }
 
@@ -214,10 +215,10 @@ class RefundServiceIntegrationTest {
     @DisplayName("시나리오 6: READY 상태 결제는 환불 불가 (InvalidPaymentStateException)")
     void testRefundFailsForNonCapturedPayment() {
         // READY 상태 결제 생성
-        Payment readyPayment = new Payment();
+        PaymentJpaEntity readyPayment = new PaymentJpaEntity();
         readyPayment.setOrderId(2L);
         readyPayment.setAmount(new BigDecimal("5000.00"));
-        readyPayment.setStatus(Payment.PaymentStatus.READY);
+        readyPayment.setStatus("READY");
         readyPayment = paymentRepository.save(readyPayment);
 
         String idempotencyKey = UUID.randomUUID().toString();
@@ -251,9 +252,9 @@ class RefundServiceIntegrationTest {
         assertThat(refund.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
         assertThat(refund.getAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
 
-        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(payment.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
-        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(payment.getStatus()).isEqualTo("REFUNDED");
         assertThat(payment.isFullyRefunded()).isTrue();
         assertThat(payment.getRefundableAmount()).isEqualByComparingTo(BigDecimal.ZERO);
     }
@@ -270,9 +271,9 @@ class RefundServiceIntegrationTest {
                 "9999원 환불"
         );
 
-        Payment afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(afterFirst.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("1.00"));
-        assertThat(afterFirst.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+        assertThat(afterFirst.getStatus()).isEqualTo("CAPTURED");
 
         // 남은 1원 환불
         String idempotencyKey2 = UUID.randomUUID().toString();
@@ -285,9 +286,9 @@ class RefundServiceIntegrationTest {
 
         assertThat(refund2.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
 
-        Payment afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(afterSecond.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
-        assertThat(afterSecond.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(afterSecond.getStatus()).isEqualTo("REFUNDED");
         assertThat(afterSecond.getRefundableAmount()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
@@ -314,10 +315,10 @@ class RefundServiceIntegrationTest {
                 .isInstanceOf(RefundExceedsPaymentException.class)
                 .hasMessageContaining("환불 가능 금액을 초과했습니다. 환불 가능: 1.00, 요청: 2.00");
 
-        // Payment 상태는 변경되지 않음
-        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        // PaymentJpaEntity 상태는 변경되지 않음
+        PaymentJpaEntity payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(payment.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("9999.00"));
-        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+        assertThat(payment.getStatus()).isEqualTo("CAPTURED");
     }
 
     @Test
@@ -334,10 +335,10 @@ class RefundServiceIntegrationTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("환불 금액은 0보다 커야 합니다");
 
-        // Payment 상태는 변경되지 않음
-        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        // PaymentJpaEntity 상태는 변경되지 않음
+        PaymentJpaEntity payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(payment.getRefundedAmount()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+        assertThat(payment.getStatus()).isEqualTo("CAPTURED");
     }
 
     @Test
@@ -369,7 +370,7 @@ class RefundServiceIntegrationTest {
 
         assertThat(refund1.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
 
-        Payment afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity afterFirst = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(afterFirst.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("0.01"));
         assertThat(afterFirst.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("9999.99"));
 
@@ -384,9 +385,9 @@ class RefundServiceIntegrationTest {
 
         assertThat(refund2.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
 
-        Payment afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity afterSecond = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(afterSecond.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
-        assertThat(afterSecond.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(afterSecond.getStatus()).isEqualTo("REFUNDED");
     }
 
     @Test
@@ -396,28 +397,28 @@ class RefundServiceIntegrationTest {
         String key1 = UUID.randomUUID().toString();
         refundService.createRefund(testPayment.getId(), new BigDecimal("3333.33"), key1, "1차");
 
-        Payment after1 = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity after1 = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(after1.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("3333.33"));
         assertThat(after1.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("6666.67"));
-        assertThat(after1.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+        assertThat(after1.getStatus()).isEqualTo("CAPTURED");
 
         // 2차: 3333.33원
         String key2 = UUID.randomUUID().toString();
         refundService.createRefund(testPayment.getId(), new BigDecimal("3333.33"), key2, "2차");
 
-        Payment after2 = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity after2 = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(after2.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("6666.66"));
         assertThat(after2.getRefundableAmount()).isEqualByComparingTo(new BigDecimal("3333.34"));
-        assertThat(after2.getStatus()).isEqualTo(Payment.PaymentStatus.CAPTURED);
+        assertThat(after2.getStatus()).isEqualTo("CAPTURED");
 
         // 3차: 3333.34원 (전액)
         String key3 = UUID.randomUUID().toString();
         refundService.createRefund(testPayment.getId(), new BigDecimal("3333.34"), key3, "3차");
 
-        Payment after3 = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        PaymentJpaEntity after3 = paymentRepository.findById(testPayment.getId()).orElseThrow();
         assertThat(after3.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("10000.00"));
         assertThat(after3.getRefundableAmount()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(after3.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(after3.getStatus()).isEqualTo("REFUNDED");
         assertThat(after3.isFullyRefunded()).isTrue();
     }
 
@@ -428,8 +429,8 @@ class RefundServiceIntegrationTest {
         String key1 = UUID.randomUUID().toString();
         refundService.createRefund(testPayment.getId(), new BigDecimal("10000.00"), key1, "전액 환불");
 
-        Payment payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
-        assertThat(payment.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        PaymentJpaEntity payment = paymentRepository.findById(testPayment.getId()).orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo("REFUNDED");
 
         // 추가 환불 시도 (REFUNDED 상태)
         String key2 = UUID.randomUUID().toString();
@@ -447,10 +448,10 @@ class RefundServiceIntegrationTest {
     @DisplayName("경계값 9: 매우 큰 금액 환불 (오버플로우 방지)")
     void testLargeAmountRefund() {
         // 큰 금액 결제 생성
-        Payment largePayment = new Payment();
+        PaymentJpaEntity largePayment = new PaymentJpaEntity();
         largePayment.setOrderId(999L);
         largePayment.setAmount(new BigDecimal("99999999.99")); // DECIMAL(10, 2) 최대값
-        largePayment.setStatus(Payment.PaymentStatus.CAPTURED);
+        largePayment.setStatus("CAPTURED");
         largePayment.setPaymentMethod("CARD");
         largePayment.setPgTransactionId("PG-LARGE-" + UUID.randomUUID());
         largePayment = paymentRepository.save(largePayment);
@@ -466,8 +467,8 @@ class RefundServiceIntegrationTest {
 
         assertThat(refund.getStatus()).isEqualTo(Refund.RefundStatus.COMPLETED);
 
-        Payment afterRefund = paymentRepository.findById(largePayment.getId()).orElseThrow();
+        PaymentJpaEntity afterRefund = paymentRepository.findById(largePayment.getId()).orElseThrow();
         assertThat(afterRefund.getRefundedAmount()).isEqualByComparingTo(new BigDecimal("99999999.99"));
-        assertThat(afterRefund.getStatus()).isEqualTo(Payment.PaymentStatus.REFUNDED);
+        assertThat(afterRefund.getStatus()).isEqualTo("REFUNDED");
     }
 }

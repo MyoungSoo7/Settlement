@@ -59,4 +59,17 @@ public class PaymentJpaEntity {
         updatedAt = LocalDateTime.now();
     }
 
+    /**
+     * 환불 가능 금액 계산
+     */
+    public BigDecimal getRefundableAmount() {
+        return amount.subtract(refundedAmount);
+    }
+
+    /**
+     * 전액 환불 여부
+     */
+    public boolean isFullyRefunded() {
+        return refundedAmount.compareTo(amount) >= 0;
+    }
 }
