@@ -1,6 +1,6 @@
 package github.lms.lemuel.payment.adapter.out.persistence;
 
-import github.lms.lemuel.payment.domain.Payment;
+import github.lms.lemuel.payment.domain.PaymentDomain;
 import github.lms.lemuel.payment.domain.PaymentStatus;
 import org.springframework.stereotype.Component;
 
@@ -13,8 +13,8 @@ public class PaymentMapper {
     /**
      * Map JPA entity to domain model
      */
-    public Payment toDomain(PaymentJpaEntity entity) {
-        return new Payment(
+    public PaymentDomain toDomain(PaymentJpaEntity entity) {
+        return new PaymentDomain(
             entity.getId(),
             entity.getOrderId(),
             entity.getAmount(),
@@ -31,18 +31,18 @@ public class PaymentMapper {
     /**
      * Map domain model to JPA entity
      */
-    public PaymentJpaEntity toJpaEntity(Payment payment) {
+    public PaymentJpaEntity toJpaEntity(PaymentDomain paymentDomain) {
         PaymentJpaEntity entity = new PaymentJpaEntity();
-        entity.setId(payment.getId());
-        entity.setOrderId(payment.getOrderId());
-        entity.setAmount(payment.getAmount());
-        entity.setRefundedAmount(payment.getRefundedAmount());
-        entity.setStatus(payment.getStatus().name());
-        entity.setPaymentMethod(payment.getPaymentMethod());
-        entity.setPgTransactionId(payment.getPgTransactionId());
-        entity.setCapturedAt(payment.getCapturedAt());
-        entity.setCreatedAt(payment.getCreatedAt());
-        entity.setUpdatedAt(payment.getUpdatedAt());
+        entity.setId(paymentDomain.getId());
+        entity.setOrderId(paymentDomain.getOrderId());
+        entity.setAmount(paymentDomain.getAmount());
+        entity.setRefundedAmount(paymentDomain.getRefundedAmount());
+        entity.setStatus(paymentDomain.getStatus().name());
+        entity.setPaymentMethod(paymentDomain.getPaymentMethod());
+        entity.setPgTransactionId(paymentDomain.getPgTransactionId());
+        entity.setCapturedAt(paymentDomain.getCapturedAt());
+        entity.setCreatedAt(paymentDomain.getCreatedAt());
+        entity.setUpdatedAt(paymentDomain.getUpdatedAt());
         return entity;
     }
 }

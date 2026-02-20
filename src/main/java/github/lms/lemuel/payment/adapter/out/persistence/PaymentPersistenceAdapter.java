@@ -1,8 +1,8 @@
 package github.lms.lemuel.payment.adapter.out.persistence;
 
-import github.lms.lemuel.payment.domain.Payment;
-import github.lms.lemuel.payment.port.out.LoadPaymentPort;
-import github.lms.lemuel.payment.port.out.SavePaymentPort;
+import github.lms.lemuel.payment.domain.PaymentDomain;
+import github.lms.lemuel.payment.application.port.out.LoadPaymentPort;
+import github.lms.lemuel.payment.application.port.out.SavePaymentPort;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -22,20 +22,20 @@ public class PaymentPersistenceAdapter implements LoadPaymentPort, SavePaymentPo
     }
 
     @Override
-    public Optional<Payment> loadById(Long id) {
+    public Optional<PaymentDomain> loadById(Long id) {
         return paymentJpaRepository.findById(id)
             .map(paymentMapper::toDomain);
     }
 
     @Override
-    public Optional<Payment> loadByOrderId(Long orderId) {
+    public Optional<PaymentDomain> loadByOrderId(Long orderId) {
         return paymentJpaRepository.findByOrderId(orderId)
             .map(paymentMapper::toDomain);
     }
 
     @Override
-    public Payment save(Payment payment) {
-        PaymentJpaEntity entity = paymentMapper.toJpaEntity(payment);
+    public PaymentDomain save(PaymentDomain paymentDomain) {
+        PaymentJpaEntity entity = paymentMapper.toJpaEntity(paymentDomain);
         PaymentJpaEntity savedEntity = paymentJpaRepository.save(entity);
         return paymentMapper.toDomain(savedEntity);
     }

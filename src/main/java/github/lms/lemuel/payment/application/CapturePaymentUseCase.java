@@ -1,13 +1,13 @@
 package github.lms.lemuel.payment.application;
 
-import github.lms.lemuel.payment.domain.Payment;
+import github.lms.lemuel.payment.domain.PaymentDomain;
 import github.lms.lemuel.payment.domain.exception.PaymentNotFoundException;
-import github.lms.lemuel.payment.port.in.CapturePaymentPort;
-import github.lms.lemuel.payment.port.out.LoadPaymentPort;
-import github.lms.lemuel.payment.port.out.PgClientPort;
-import github.lms.lemuel.payment.port.out.PublishEventPort;
-import github.lms.lemuel.payment.port.out.SavePaymentPort;
-import github.lms.lemuel.payment.port.out.UpdateOrderStatusPort;
+import github.lms.lemuel.payment.application.port.in.CapturePaymentPort;
+import github.lms.lemuel.payment.application.port.out.LoadPaymentPort;
+import github.lms.lemuel.payment.application.port.out.PgClientPort;
+import github.lms.lemuel.payment.application.port.out.PublishEventPort;
+import github.lms.lemuel.payment.application.port.out.SavePaymentPort;
+import github.lms.lemuel.payment.application.port.out.UpdateOrderStatusPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,25 +34,25 @@ public class CapturePaymentUseCase implements CapturePaymentPort {
     }
 
     @Override
-    public Payment capturePayment(Long paymentId) {
-        Payment payment = loadPaymentPort.loadById(paymentId)
+    public PaymentDomain capturePayment(Long paymentId) {
+        PaymentDomain paymentDomain = loadPaymentPort.loadById(paymentId)
             .orElseThrow(() -> new PaymentNotFoundException(paymentId));
 
         // Call external PG to capture
-        pgClientPort.capture(payment.getPgTransactionId(), payment.getAmount());
+        pgClientPort.capture(paymentDomain.getPgTransactionId(), paymentDomain.getAmount());
 
         // Domain logic
-        payment.capture();
+        paymentDomain.capture();
 
         // Save payment
-        Payment savedPayment = savePaymentPort.save(payment);
+        PaymentDomain savedPaymentDomain = savePaymentPort.save(paymentDomain);
 
         // Update order status to PAID
-        updateOrderStatusPort.updateOrderStatus(savedPayment.getOrderId(), "PAID");
+        updateOrderStatusPort.updateOrderStatus(savedPaymentDomain.getOrderId(), "PAID");
 
         // Publish event
-        publishEventPort.publishPaymentCaptured(savedPayment.getId(), savedPayment.getOrderId());
+        publishEventPort.publishPaymentCaptured(savedPaymentDomain.getId(), savedPaymentDomain.getOrderId());
 
-        return savedPayment;
+        return savedPaymentDomain;
     }
 }

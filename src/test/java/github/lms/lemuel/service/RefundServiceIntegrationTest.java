@@ -1,11 +1,12 @@
 package github.lms.lemuel.service;
 
-import github.lms.lemuel.domain.Payment;
+import github.lms.lemuel.payment.domain.Payment;
 import github.lms.lemuel.domain.Refund;
 import github.lms.lemuel.domain.Settlement;
 import github.lms.lemuel.domain.SettlementAdjustment;
-import github.lms.lemuel.exception.InvalidPaymentStateException;
-import github.lms.lemuel.exception.RefundExceedsPaymentException;
+import github.lms.lemuel.common.exception.InvalidPaymentStateException;
+import github.lms.lemuel.common.exception.RefundExceedsPaymentException;
+import github.lms.lemuel.payment.adapter.out.persistence.PaymentRepository;
 import github.lms.lemuel.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

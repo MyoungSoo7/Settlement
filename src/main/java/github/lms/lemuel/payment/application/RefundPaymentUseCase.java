@@ -1,13 +1,13 @@
 package github.lms.lemuel.payment.application;
 
-import github.lms.lemuel.payment.domain.Payment;
+import github.lms.lemuel.payment.domain.PaymentDomain;
 import github.lms.lemuel.payment.domain.exception.PaymentNotFoundException;
-import github.lms.lemuel.payment.port.in.RefundPaymentPort;
-import github.lms.lemuel.payment.port.out.LoadPaymentPort;
-import github.lms.lemuel.payment.port.out.PgClientPort;
-import github.lms.lemuel.payment.port.out.PublishEventPort;
-import github.lms.lemuel.payment.port.out.SavePaymentPort;
-import github.lms.lemuel.payment.port.out.UpdateOrderStatusPort;
+import github.lms.lemuel.payment.application.port.in.RefundPaymentPort;
+import github.lms.lemuel.payment.application.port.out.LoadPaymentPort;
+import github.lms.lemuel.payment.application.port.out.PgClientPort;
+import github.lms.lemuel.payment.application.port.out.PublishEventPort;
+import github.lms.lemuel.payment.application.port.out.SavePaymentPort;
+import github.lms.lemuel.payment.application.port.out.UpdateOrderStatusPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,25 +34,25 @@ public class RefundPaymentUseCase implements RefundPaymentPort {
     }
 
     @Override
-    public Payment refundPayment(Long paymentId) {
-        Payment payment = loadPaymentPort.loadById(paymentId)
+    public PaymentDomain refundPayment(Long paymentId) {
+        PaymentDomain paymentDomain = loadPaymentPort.loadById(paymentId)
             .orElseThrow(() -> new PaymentNotFoundException(paymentId));
 
         // Call external PG to refund
-        pgClientPort.refund(payment.getPgTransactionId(), payment.getAmount());
+        pgClientPort.refund(paymentDomain.getPgTransactionId(), paymentDomain.getAmount());
 
         // Domain logic
-        payment.refund();
+        paymentDomain.refund();
 
         // Save payment
-        Payment savedPayment = savePaymentPort.save(payment);
+        PaymentDomain savedPaymentDomain = savePaymentPort.save(paymentDomain);
 
         // Update order status to REFUNDED
-        updateOrderStatusPort.updateOrderStatus(savedPayment.getOrderId(), "REFUNDED");
+        updateOrderStatusPort.updateOrderStatus(savedPaymentDomain.getOrderId(), "REFUNDED");
 
         // Publish event
-        publishEventPort.publishPaymentRefunded(savedPayment.getId(), savedPayment.getOrderId());
+        publishEventPort.publishPaymentRefunded(savedPaymentDomain.getId(), savedPaymentDomain.getOrderId());
 
-        return savedPayment;
+        return savedPaymentDomain;
     }
 }

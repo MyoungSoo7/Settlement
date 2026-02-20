@@ -160,7 +160,7 @@ CREATE TABLE refunds (
     CONSTRAINT chk_refunds_amount CHECK (amount > 0)
 );
 
--- 멱등성 보장: 동일 payment + idempotency_key 중복 방지
+-- 멱등성 보장: 동일 paymentDomain + idempotency_key 중복 방지
 CREATE UNIQUE INDEX idx_refunds_payment_idempotency
 ON refunds(payment_id, idempotency_key);
 ```

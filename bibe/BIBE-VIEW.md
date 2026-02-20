@@ -495,7 +495,7 @@ frontend/src/api/
 ├── axios.ts           # Axios 인스턴스 (JWT 인터셉터 포함)
 ├── auth.ts            # 인증 API (로그인, 회원가입)
 ├── order.ts           # 주문 API
-├── payment.ts         # 결제 API
+├── paymentDomain.ts         # 결제 API
 ├── refund.ts          # 환불 API
 └── settlement.ts      # 정산 API (검색, 승인, 반려)
 ```

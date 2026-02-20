@@ -22,7 +22,7 @@ frontend/
 │   │   ├── auth.ts       # 인증 API
 │   │   ├── settlement.ts # 정산 검색 API
 │   │   ├── order.ts      # 주문 API
-│   │   ├── payment.ts    # 결제 API
+│   │   ├── paymentDomain.ts    # 결제 API
 │   │   └── refund.ts     # 환불 API
 │   ├── components/       # 재사용 가능한 컴포넌트
 │   ├── pages/            # 페이지 컴포넌트

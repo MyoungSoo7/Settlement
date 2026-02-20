@@ -1,6 +1,6 @@
 package github.lms.lemuel.payment.adapter.out.event;
 
-import github.lms.lemuel.payment.port.out.PublishEventPort;
+import github.lms.lemuel.payment.application.port.out.PublishEventPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

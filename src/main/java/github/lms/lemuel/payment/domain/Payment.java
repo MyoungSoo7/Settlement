@@ -1,134 +1,94 @@
 package github.lms.lemuel.payment.domain;
 
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Payment Domain Entity - Pure domain model without framework dependencies
- */
+@Entity
+@Table(name = "payments")
+@Getter
+@Setter
 public class Payment {
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "order_id", nullable = false)
     private Long orderId;
+
+    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
-    private BigDecimal refundedAmount;
-    private PaymentStatus status;
+
+    @Column(name = "refunded_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private PaymentStatus status = PaymentStatus.READY;
+
+    @Column(name = "payment_method", length = 50)
     private String paymentMethod;
+
+    @Column(name = "pg_transaction_id", length = 100)
     private String pgTransactionId;
+
+    @Column(name = "captured_at")
     private LocalDateTime capturedAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 
-    // Constructor for creating new payment
-    public Payment(Long orderId, BigDecimal amount, String paymentMethod) {
-        this.orderId = orderId;
-        this.amount = amount;
-        this.paymentMethod = paymentMethod;
-        this.status = PaymentStatus.READY;
-        this.refundedAmount = BigDecimal.ZERO;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt ;
+
+    public enum PaymentStatus {
+        READY,      // 결제 생성(요청 준비)
+        AUTHORIZED, // PG승인됨(카드/간편결제 승인)
+        CAPTURED,   // 매입/확정(실 결제 완료->정산 대상)
+        FAILED,     // 실패
+        CANCELED,   // 승인 취소
+        REFUNDED    // 환불
     }
 
-    // Constructor for reconstitution from persistence
-    public Payment(Long id, Long orderId, BigDecimal amount, BigDecimal refundedAmount,
-                   PaymentStatus status, String paymentMethod, String pgTransactionId,
-                   LocalDateTime capturedAt, LocalDateTime createdAt, LocalDateTime updatedAt) {
-        this.id = id;
-        this.orderId = orderId;
-        this.amount = amount;
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        if (updatedAt == null) {
+            updatedAt = LocalDateTime.now();
+        }
+        if (status == null) {
+            status = PaymentStatus.READY;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
+
+    public void setRefundedAmount(BigDecimal refundedAmount) {
         this.refundedAmount = refundedAmount;
-        this.status = status;
-        this.paymentMethod = paymentMethod;
-        this.pgTransactionId = pgTransactionId;
-        this.capturedAt = capturedAt;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
-
-    // Business logic: Authorize payment
-    public void authorize(String pgTransactionId) {
-        if (this.status != PaymentStatus.READY) {
-            throw new IllegalStateException("Payment must be in READY status to authorize");
-        }
-        this.status = PaymentStatus.AUTHORIZED;
-        this.pgTransactionId = pgTransactionId;
         this.updatedAt = LocalDateTime.now();
     }
 
-    // Business logic: Capture payment
-    public void capture() {
-        if (this.status != PaymentStatus.AUTHORIZED) {
-            throw new IllegalStateException("Payment must be in AUTHORIZED status to capture");
-        }
-        this.status = PaymentStatus.CAPTURED;
-        this.capturedAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    // Business logic: Refund payment
-    public void refund() {
-        if (this.status != PaymentStatus.CAPTURED) {
-            throw new IllegalStateException("Payment must be in CAPTURED status to refund");
-        }
-        this.status = PaymentStatus.REFUNDED;
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    // Business logic: Calculate refundable amount
+    /**
+     * 환불 가능 금액 계산
+     */
     public BigDecimal getRefundableAmount() {
         return amount.subtract(refundedAmount);
     }
 
-    // Business logic: Check if fully refunded
+    /**
+     * 전액 환불 여부
+     */
     public boolean isFullyRefunded() {
         return refundedAmount.compareTo(amount) >= 0;
-    }
-
-    // Business logic: Add refunded amount
-    public void addRefundedAmount(BigDecimal refundAmount) {
-        this.refundedAmount = this.refundedAmount.add(refundAmount);
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    // Getters
-    public Long getId() {
-        return id;
-    }
-
-    public Long getOrderId() {
-        return orderId;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public BigDecimal getRefundedAmount() {
-        return refundedAmount;
-    }
-
-    public PaymentStatus getStatus() {
-        return status;
-    }
-
-    public String getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public String getPgTransactionId() {
-        return pgTransactionId;
-    }
-
-    public LocalDateTime getCapturedAt() {
-        return capturedAt;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
     }
 }

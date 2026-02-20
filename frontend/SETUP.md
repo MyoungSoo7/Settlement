@@ -180,7 +180,7 @@ frontend/
 │   │   ├── axios.ts           # Axios 인스턴스 + JWT 인터셉터
 │   │   ├── auth.ts            # 인증 API
 │   │   ├── order.ts           # 주문 API
-│   │   ├── payment.ts         # 결제 API
+│   │   ├── paymentDomain.ts         # 결제 API
 │   │   ├── refund.ts          # 환불 API
 │   │   └── settlement.ts      # 정산 API
 │   ├── components/            # 재사용 컴포넌트

@@ -1,14 +1,16 @@
 package github.lms.lemuel.payment.adapter.out.persistence;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * JPA Entity for Payment - Lives in adapter layer
- */
 @Entity
 @Table(name = "payments")
+@Getter
+@Setter
 public class PaymentJpaEntity {
 
     @Id
@@ -57,84 +59,4 @@ public class PaymentJpaEntity {
         updatedAt = LocalDateTime.now();
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrderId() {
-        return orderId;
-    }
-
-    public void setOrderId(Long orderId) {
-        this.orderId = orderId;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public BigDecimal getRefundedAmount() {
-        return refundedAmount;
-    }
-
-    public void setRefundedAmount(BigDecimal refundedAmount) {
-        this.refundedAmount = refundedAmount;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public String getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public void setPaymentMethod(String paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
-
-    public String getPgTransactionId() {
-        return pgTransactionId;
-    }
-
-    public void setPgTransactionId(String pgTransactionId) {
-        this.pgTransactionId = pgTransactionId;
-    }
-
-    public LocalDateTime getCapturedAt() {
-        return capturedAt;
-    }
-
-    public void setCapturedAt(LocalDateTime capturedAt) {
-        this.capturedAt = capturedAt;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

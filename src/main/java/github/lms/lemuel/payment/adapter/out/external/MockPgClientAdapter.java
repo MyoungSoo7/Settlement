@@ -1,6 +1,6 @@
 package github.lms.lemuel.payment.adapter.out.external;
 
-import github.lms.lemuel.payment.port.out.PgClientPort;
+import github.lms.lemuel.payment.application.port.out.PgClientPort;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

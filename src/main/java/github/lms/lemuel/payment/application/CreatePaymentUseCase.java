@@ -1,13 +1,13 @@
 package github.lms.lemuel.payment.application;
 
-import github.lms.lemuel.payment.domain.Payment;
+import github.lms.lemuel.payment.domain.PaymentDomain;
 import github.lms.lemuel.payment.domain.exception.InvalidOrderStateException;
 import github.lms.lemuel.payment.domain.exception.OrderNotFoundException;
-import github.lms.lemuel.payment.port.in.CreatePaymentCommand;
-import github.lms.lemuel.payment.port.in.CreatePaymentPort;
-import github.lms.lemuel.payment.port.out.LoadOrderPort;
-import github.lms.lemuel.payment.port.out.PublishEventPort;
-import github.lms.lemuel.payment.port.out.SavePaymentPort;
+import github.lms.lemuel.payment.application.port.in.CreatePaymentCommand;
+import github.lms.lemuel.payment.application.port.in.CreatePaymentPort;
+import github.lms.lemuel.payment.application.port.out.LoadOrderPort;
+import github.lms.lemuel.payment.application.port.out.PublishEventPort;
+import github.lms.lemuel.payment.application.port.out.SavePaymentPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +28,7 @@ public class CreatePaymentUseCase implements CreatePaymentPort {
     }
 
     @Override
-    public Payment createPayment(CreatePaymentCommand command) {
+    public PaymentDomain createPayment(CreatePaymentCommand command) {
         // Load order information
         LoadOrderPort.OrderInfo order = loadOrderPort.loadOrder(command.getOrderId());
 
@@ -41,16 +41,16 @@ public class CreatePaymentUseCase implements CreatePaymentPort {
         }
 
         // Create payment domain entity
-        Payment payment = new Payment(
+        PaymentDomain paymentDomain = new PaymentDomain(
             order.getId(),
             order.getAmount(),
             command.getPaymentMethod()
         );
 
         // Save and publish event
-        Payment savedPayment = savePaymentPort.save(payment);
-        publishEventPort.publishPaymentCreated(savedPayment.getId(), savedPayment.getOrderId());
+        PaymentDomain savedPaymentDomain = savePaymentPort.save(paymentDomain);
+        publishEventPort.publishPaymentCreated(savedPaymentDomain.getId(), savedPaymentDomain.getOrderId());
 
-        return savedPayment;
+        return savedPaymentDomain;
     }
 }
