@@ -2,52 +2,18 @@ package github.lms.lemuel.settlement.adapter.out.persistence;
 
 import github.lms.lemuel.settlement.domain.Settlement;
 import github.lms.lemuel.settlement.domain.SettlementStatus;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 /**
- * Domain <-> JpaEntity 매핑
+ * Domain <-> JpaEntity 매핑 (MapStruct)
  */
-@Component
-public class SettlementPersistenceMapper {
+@Mapper(componentModel = "spring", imports = SettlementStatus.class)
+public interface SettlementPersistenceMapper {
 
-    public Settlement toDomain(SettlementJpaEntity entity) {
-        if (entity == null) {
-            return null;
-        }
+    @Mapping(target = "status", expression = "java(SettlementStatus.fromString(entity.getStatus()))")
+    Settlement toDomain(SettlementJpaEntity entity);
 
-        return new Settlement(
-                entity.getId(),
-                entity.getPaymentId(),
-                entity.getOrderId(),
-                entity.getPaymentAmount(),
-                entity.getCommission(),
-                entity.getNetAmount(),
-                SettlementStatus.fromString(entity.getStatus()),
-                entity.getSettlementDate(),
-                entity.getConfirmedAt(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
-    }
-
-    public SettlementJpaEntity toEntity(Settlement domain) {
-        if (domain == null) {
-            return null;
-        }
-
-        SettlementJpaEntity entity = new SettlementJpaEntity();
-        entity.setId(domain.getId());
-        entity.setPaymentId(domain.getPaymentId());
-        entity.setOrderId(domain.getOrderId());
-        entity.setPaymentAmount(domain.getPaymentAmount());
-        entity.setCommission(domain.getCommission());
-        entity.setNetAmount(domain.getNetAmount());
-        entity.setStatus(domain.getStatus().name());
-        entity.setSettlementDate(domain.getSettlementDate());
-        entity.setConfirmedAt(domain.getConfirmedAt());
-        entity.setCreatedAt(domain.getCreatedAt());
-        entity.setUpdatedAt(domain.getUpdatedAt());
-
-        return entity;
-    }
+    @Mapping(target = "status", expression = "java(domain.getStatus().name())")
+    SettlementJpaEntity toEntity(Settlement domain);
 }

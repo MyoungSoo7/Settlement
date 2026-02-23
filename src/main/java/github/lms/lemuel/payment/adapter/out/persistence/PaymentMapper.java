@@ -6,13 +6,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Mapper between Domain Payment and JPA PaymentJpaEntity
+ * (수동 매핑 유지: PaymentDomain이 불변 객체로 setter가 없음)
  */
 @Component
 public class PaymentMapper {
 
-    /**
-     * Map JPA entity to domain model
-     */
     public PaymentDomain toDomain(PaymentJpaEntity entity) {
         return new PaymentDomain(
             entity.getId(),
@@ -28,21 +26,18 @@ public class PaymentMapper {
         );
     }
 
-    /**
-     * Map domain model to JPA entity
-     */
-    public PaymentJpaEntity toJpaEntity(PaymentDomain paymentDomain) {
+    public PaymentJpaEntity toJpaEntity(PaymentDomain domain) {
         PaymentJpaEntity entity = new PaymentJpaEntity();
-        entity.setId(paymentDomain.getId());
-        entity.setOrderId(paymentDomain.getOrderId());
-        entity.setAmount(paymentDomain.getAmount());
-        entity.setRefundedAmount(paymentDomain.getRefundedAmount());
-        entity.setStatus(paymentDomain.getStatus().name());
-        entity.setPaymentMethod(paymentDomain.getPaymentMethod());
-        entity.setPgTransactionId(paymentDomain.getPgTransactionId());
-        entity.setCapturedAt(paymentDomain.getCapturedAt());
-        entity.setCreatedAt(paymentDomain.getCreatedAt());
-        entity.setUpdatedAt(paymentDomain.getUpdatedAt());
+        entity.setId(domain.getId());
+        entity.setOrderId(domain.getOrderId());
+        entity.setAmount(domain.getAmount());
+        entity.setRefundedAmount(domain.getRefundedAmount());
+        entity.setStatus(domain.getStatus().name());
+        entity.setPaymentMethod(domain.getPaymentMethod());
+        entity.setPgTransactionId(domain.getPgTransactionId());
+        entity.setCapturedAt(domain.getCapturedAt());
+        entity.setCreatedAt(domain.getCreatedAt());
+        entity.setUpdatedAt(domain.getUpdatedAt());
         return entity;
     }
 }

@@ -2,42 +2,18 @@ package github.lms.lemuel.order.adapter.out.persistence;
 
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.domain.OrderStatus;
-import org.springframework.stereotype.Component;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 /**
- * Domain <-> JpaEntity 매핑
+ * Domain <-> JpaEntity 매핑 (MapStruct)
  */
-@Component
-public class OrderPersistenceMapper {
+@Mapper(componentModel = "spring", imports = OrderStatus.class)
+public interface OrderPersistenceMapper {
 
-    public Order toDomain(OrderJpaEntity entity) {
-        if (entity == null) {
-            return null;
-        }
+    @Mapping(target = "status", expression = "java(OrderStatus.fromString(entity.getStatus()))")
+    Order toDomain(OrderJpaEntity entity);
 
-        return new Order(
-                entity.getId(),
-                entity.getUserId(),
-                entity.getAmount(),
-                OrderStatus.fromString(entity.getStatus()),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt()
-        );
-    }
-
-    public OrderJpaEntity toEntity(Order domain) {
-        if (domain == null) {
-            return null;
-        }
-
-        OrderJpaEntity entity = new OrderJpaEntity();
-        entity.setId(domain.getId());
-        entity.setUserId(domain.getUserId());
-        entity.setAmount(domain.getAmount());
-        entity.setStatus(domain.getStatus().name());
-        entity.setCreatedAt(domain.getCreatedAt());
-        entity.setUpdatedAt(domain.getUpdatedAt());
-
-        return entity;
-    }
+    @Mapping(target = "status", expression = "java(domain.getStatus().name())")
+    OrderJpaEntity toEntity(Order domain);
 }
