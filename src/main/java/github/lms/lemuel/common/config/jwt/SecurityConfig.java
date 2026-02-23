@@ -2,6 +2,7 @@ package github.lms.lemuel.common.config.jwt;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -84,14 +85,20 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 // CSRF 비활성화 (JWT 사용 시 불필요)
                 .csrf(csrf -> csrf.disable())
+                // Form Login 비활성화
+                .formLogin(form -> form.disable())
+                // HTTP Basic 비활성화
+                .httpBasic(basic -> basic.disable())
                 // Stateless 세션 관리
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // 요청별 인증 설정
                 .authorizeHttpRequests(auth -> auth
+                        // 인증 불필요 (Public endpoints)
+                        .requestMatchers(HttpMethod.POST, "/users").permitAll()               // 회원가입
+                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()          // 로그인
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/auth/login").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
-                        .requestMatchers("/users").permitAll()
+                        // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )
                 // JWT 필터 추가

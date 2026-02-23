@@ -7,6 +7,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   password: string;
+  role: 'USER' | 'ADMIN' | 'MANAGER';
 }
 
 export interface UserResponse {

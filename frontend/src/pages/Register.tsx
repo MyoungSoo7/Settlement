@@ -8,6 +8,7 @@ const Register: React.FC = () => {
   const [formData, setFormData] = useState<RegisterRequest>({
     email: '',
     password: '',
+    role: 'USER',
   });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,16 +27,21 @@ const Register: React.FC = () => {
     }
 
     try {
-      await authApi.register(formData);
+      console.log('회원가입 요청 데이터:', formData);
+      const result = await authApi.register(formData);
+      console.log('회원가입 성공:', result);
       alert('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.');
-      navigate('/login');
+      window.location.href = '/login';
     } catch (err: any) {
+      console.error('Register error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
       if (err.response?.status === 409) {
         setError('이미 사용 중인 이메일입니다.');
       } else {
-        setError(err.response?.data || '회원가입에 실패했습니다.');
+        const errorMsg = err.response?.data?.message || err.response?.data || err.message || '회원가입에 실패했습니다.';
+        setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       }
-      console.error('Register error:', err);
     } finally {
       setLoading(false);
     }
