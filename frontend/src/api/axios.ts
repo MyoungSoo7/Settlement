@@ -1,5 +1,12 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
+// Toast 관리를 위한 전역 참조
+let globalShowToast: ((message: string, type: 'success' | 'error' | 'warning' | 'info') => void) | null = null;
+
+export const setGlobalToast = (showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void) => {
+  globalShowToast = showToast;
+};
+
 // Axios 인스턴스 생성
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
@@ -33,19 +40,42 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     // 401 Unauthorized: 토큰 만료 또는 인증 실패
     if (error.response?.status === 401) {
+      if (globalShowToast) {
+        globalShowToast('세션이 만료되었습니다. 다시 로그인해주세요.', 'warning');
+      }
+
       localStorage.removeItem('access_token');
       localStorage.removeItem('user_email');
       localStorage.removeItem('user_role');
 
       // 로그인 페이지로 리다이렉트
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1000); // Toast 메시지를 보여주기 위한 딜레이
       }
     }
 
     // 403 Forbidden: 권한 없음
     if (error.response?.status === 403) {
+      if (globalShowToast) {
+        globalShowToast('접근 권한이 없습니다.', 'error');
+      }
       console.error('Access denied:', error.response.data);
+    }
+
+    // 500 Internal Server Error
+    if (error.response?.status === 500) {
+      if (globalShowToast) {
+        globalShowToast('서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', 'error');
+      }
+    }
+
+    // Network Error
+    if (error.message === 'Network Error') {
+      if (globalShowToast) {
+        globalShowToast('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.', 'error');
+      }
     }
 
     return Promise.reject(error);
