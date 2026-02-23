@@ -25,7 +25,7 @@ public class UserController {
     @PostMapping
     public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
         User user = createUserUseCase.createUser(
-                new CreateUserUseCase.CreateUserCommand(request.getEmail(), request.getPassword())
+                new CreateUserUseCase.CreateUserCommand(request.getEmail(), request.getPassword(), request.getRole())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(UserResponse.from(user));
     }
