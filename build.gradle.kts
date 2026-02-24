@@ -97,7 +97,7 @@ tasks.check {
 
 sonar {
     properties {
-        property("sonar.projectKey", "MyoungSoo7_settlement7")
+        property("sonar.projectKey", "MyoungSoo7_settlement")
         property("sonar.organization", "myoungsoo7")
         property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "${layout.buildDirectory.get()}/reports/jacoco/test/jacocoTestReport.xml")
