@@ -4,6 +4,8 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
     jacoco
     id("org.sonarqube") version "5.1.0.4882"
+    id("checkstyle")
+    id("com.github.spotbugs") version "6.0.26"
 }
 
 group = "github.lms"
@@ -95,6 +97,34 @@ tasks.check {
     dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
+// Checkstyle configuration
+checkstyle {
+    toolVersion = "10.12.5"
+    configFile = file("${rootDir}/.github/checkstyle.xml")
+    isIgnoreFailures = false
+    maxWarnings = 50
+    maxErrors = 0
+}
+
+// SpotBugs configuration
+spotbugs {
+    toolVersion.set("4.8.3")
+    effort.set(com.github.spotbugs.snom.Effort.MAX)
+    reportLevel.set(com.github.spotbugs.snom.Confidence.MEDIUM)
+    ignoreFailures.set(true)
+}
+
+tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
+    reports.create("html") {
+        required.set(true)
+        outputLocation.set(file("${layout.buildDirectory.get()}/reports/spotbugs/spotbugs.html"))
+    }
+    reports.create("xml") {
+        required.set(true)
+        outputLocation.set(file("${layout.buildDirectory.get()}/reports/spotbugs/spotbugs.xml"))
+    }
+}
+
 sonar {
     properties {
         property("sonar.projectKey", "MyoungSoo7_settlement")
@@ -102,9 +132,10 @@ sonar {
         property("sonar.host.url", "https://sonarcloud.io")
         property("sonar.coverage.jacoco.xmlReportPaths", "${layout.buildDirectory.get()}/reports/jacoco/test/jacocoTestReport.xml")
         property("sonar.java.coveragePlugin", "jacoco")
-        property("sonar.qualitygate.wait", false)
+        property("sonar.qualitygate.wait", true)
         property("sonar.junit.reportPaths", "${layout.buildDirectory.get()}/test-results/test")
         property("sonar.java.source", "21")
-
+        property("sonar.java.checkstyle.reportPaths", "${layout.buildDirectory.get()}/reports/checkstyle/main.xml")
+        property("sonar.java.spotbugs.reportPaths", "${layout.buildDirectory.get()}/reports/spotbugs/spotbugs.xml")
     }
 }
