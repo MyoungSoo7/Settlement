@@ -3,7 +3,7 @@ FROM gradle:8.5-jdk21-alpine AS builder
 WORKDIR /app
 
 # Copy Gradle files for dependency caching
-COPY build.gradle.kts ./
+COPY build.gradle.kts settings.gradle ./
 
 COPY gradle ./gradle
 COPY src ./src
