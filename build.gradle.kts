@@ -4,7 +4,6 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
     jacoco
     id("org.sonarqube") version "5.1.0.4882"
-
 }
 
 group = "github.lms"
@@ -94,17 +93,6 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
     dependsOn(tasks.jacocoTestCoverageVerification)
-}
-
-tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
-    reports.create("html") {
-        required.set(true)
-        outputLocation.set(file("${layout.buildDirectory.get()}/reports/spotbugs/spotbugs.html"))
-    }
-    reports.create("xml") {
-        required.set(true)
-        outputLocation.set(file("${layout.buildDirectory.get()}/reports/spotbugs/spotbugs.xml"))
-    }
 }
 
 sonar {
