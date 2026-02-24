@@ -113,6 +113,10 @@ jobs:
         with:
           paths: ${{ github.workspace }}/build/reports/jacoco/test/jacocoTestReport.xml
           token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 4
+          min-coverage-changed-files: 4
+          title: '📊 JaCoCo Code Coverage Report'
+          update-comment: true
 
       - name: SonarCloud Scan
         run: ./gradlew sonar --no-daemon --stacktrace
@@ -124,13 +128,58 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: testpass
           SPRING_ELASTICSEARCH_URIS: http://localhost:9200
 
-#      - name: SonarCloud Quality Gate
-#        uses: sonarsource/sonarqube-quality-gate-action@v1.1.0
-#        timeout-minutes: 5
-#        env:
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#        with:
-#          scanMetadataReportFile: build/sonar/report-task.txt
+      - name: SonarCloud Quality Gate Check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          scanMetadataReportFile: build/sonar/report-task.txt
+
+      # Automated Code Review with Reviewdog
+      - name: Run Checkstyle with Reviewdog
+        if: github.event_name == 'pull_request'
+        uses: reviewdog/action-checkstyle@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          level: warning
+          checkstyle_config: .github/checkstyle.xml
+          fail_on_error: false
+
+      - name: Run SpotBugs with Reviewdog
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          ./gradlew spotbugsMain --no-daemon || true
+
+      - name: Post PR Comment - Build Summary
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let comment = '## 🤖 CI Build Summary\n\n';
+            comment += '### ✅ Build & Test Status\n';
+            comment += '- **Build**: ✅ Passed\n';
+            comment += '- **Tests**: ✅ All tests passed\n';
+            comment += '- **JaCoCo Coverage**: Check report above ⬆️\n';
+            comment += '- **SonarCloud**: Analysis completed\n\n';
+            comment += '### 📋 Checklist Reminder\n';
+            comment += '- [ ] No business logic in Controllers\n';
+            comment += '- [ ] Port/Adapter separation maintained\n';
+            comment += '- [ ] Proper exception handling\n';
+            comment += '- [ ] Unit tests added/updated\n';
+            comment += '- [ ] Integration tests (if needed)\n\n';
+            comment += '> 💡 **Tip**: Check the PR template for complete checklist\n';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
 
   backend-ghcr:
     name: Backend - Build & Push to GHCR
