@@ -41,3 +41,7 @@ out/
 ### react ###
 node_modules/
 frontend/node_modules/
+
+/gradle.properties
+.gradle.properties
+gradle.properties
