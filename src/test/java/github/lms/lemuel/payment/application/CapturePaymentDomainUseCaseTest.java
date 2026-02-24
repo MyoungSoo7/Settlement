@@ -8,6 +8,7 @@ import github.lms.lemuel.payment.application.port.out.PgClientPort;
 import github.lms.lemuel.payment.application.port.out.PublishEventPort;
 import github.lms.lemuel.payment.application.port.out.SavePaymentPort;
 import github.lms.lemuel.payment.application.port.out.UpdateOrderStatusPort;
+import github.lms.lemuel.settlement.application.port.in.CreateSettlementFromPaymentUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,9 @@ class CapturePaymentDomainUseCaseTest {
     @Mock
     private PublishEventPort publishEventPort;
 
+    @Mock
+    private CreateSettlementFromPaymentUseCase createSettlementFromPaymentUseCase;
+
     private CapturePaymentUseCase capturePaymentUseCase;
 
     @BeforeEach
@@ -54,7 +58,8 @@ class CapturePaymentDomainUseCaseTest {
             savePaymentPort,
             pgClientPort,
             updateOrderStatusPort,
-            publishEventPort
+            publishEventPort,
+            createSettlementFromPaymentUseCase
         );
     }
 
