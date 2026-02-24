@@ -2,9 +2,9 @@ name: CI (Backend + SonarCloud + GHCR) / Frontend GHCR
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ,master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main ,master ]
 
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
