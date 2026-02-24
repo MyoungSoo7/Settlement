@@ -5,6 +5,10 @@ on:
     branches: [ main, master ]
     types: [ opened, synchronize, reopened ]
 
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   code-review:
     name: Automated Code Review
@@ -30,8 +34,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Checkstyle - Code style analysis
+      # Checkstyle
       - name: Run Checkstyle
+        id: checkstyle
         run: ./gradlew checkstyleMain checkstyleTest --no-daemon
         continue-on-error: true
 
@@ -43,188 +48,82 @@ jobs:
           path: build/reports/checkstyle/
           retention-days: 7
 
-      - name: Checkstyle Report with Reviewdog
+      # Reviewdog (parse checkstyle xml -> PR review comments)
+      - name: Reviewdog (Checkstyle)
         if: always()
-        uses: reviewdog/action-checkstyle@v1
+        uses: reviewdog/action-reviewdog@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
           level: warning
-          checkstyle_config: .github/checkstyle.xml
-          fail_on_error: false
+          filter_mode: diff_context
+          fail_on_error: "false"
+          tool_name: checkstyle
+          run: |
+            # main + test 둘 다 있으면 둘 다 올림. 없으면 있는 것만 올림.
+            if [ -f build/reports/checkstyle/main.xml ]; then
+              reviewdog -f=checkstyle -name="checkstyle(main)" -reporter=github-pr-review -filter-mode=diff_context -fail-on-error=false -level=warning < build/reports/checkstyle/main.xml
+            fi
+            if [ -f build/reports/checkstyle/test.xml ]; then
+              reviewdog -f=checkstyle -name="checkstyle(test)" -reporter=github-pr-review -filter-mode=diff_context -fail-on-error=false -level=warning < build/reports/checkstyle/test.xml
+            fi
 
       # Dependency vulnerability check
       - name: Run Dependency Check
-        run: |
-          ./gradlew dependencyCheckAnalyze --no-daemon || echo "Dependency check completed with warnings"
+        id: depcheck
+        run: ./gradlew dependencyCheckAnalyze --no-daemon || echo "Dependency check completed with warnings"
         continue-on-error: true
 
-      # Architecture validation
-      - name: Check Hexagonal Architecture Violations
+      # PR size + summary (ONE comment, update)
+      - name: Post/Update Review Summary (single comment)
+        if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const path = require('path');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
 
-            // Simple architecture rule checker
-            const violations = [];
-
-            // Check if domain entities are used in controllers
-            const findFiles = (dir, pattern) => {
-              const files = [];
-              const items = fs.readdirSync(dir, { withFileTypes: true });
-              for (const item of items) {
-                const fullPath = path.join(dir, item.name);
-                if (item.isDirectory() && !item.name.includes('node_modules') && !item.name.includes('.git')) {
-                  files.push(...findFiles(fullPath, pattern));
-                } else if (item.isFile() && pattern.test(item.name)) {
-                  files.push(fullPath);
-                }
-              }
-              return files;
-            };
-
-            // Check controller files
-            try {
-              const controllerFiles = findFiles('src/main/java', /Controller\.java$/);
-
-              for (const file of controllerFiles) {
-                const content = fs.readFileSync(file, 'utf8');
-
-                // Check for direct domain entity usage in return types
-                if (content.includes('return') && content.match(/domain\.\w+(?!Exception)/)) {
-                  violations.push(`⚠️ ${file}: Possible domain entity exposure in controller`);
-                }
-
-                // Check for business logic in controllers
-                if (content.match(/new\s+\w+Service\(/)) {
-                  violations.push(`⚠️ ${file}: Direct service instantiation (should use DI)`);
-                }
-              }
-
-              if (violations.length > 0) {
-                const comment = `## 🏗️ Architecture Review\n\n### ⚠️ Potential Architecture Violations\n\n${violations.join('\n')}\n\n` +
-                  `### 📋 Hexagonal Architecture Checklist\n` +
-                  `- Controllers should only use DTOs/Responses, not domain entities\n` +
-                  `- Business logic should be in Domain/Application layer\n` +
-                  `- Dependencies should point inward (Adapter → Application → Domain)\n` +
-                  `- Use dependency injection, not direct instantiation\n\n` +
-                  `> 💡 **Note**: This is an automated check. Please review manually.`;
-
-                github.rest.issues.createComment({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: comment
-                });
-              }
-            } catch (error) {
-              console.log('Architecture check completed');
-            }
-
-      # Test quality check
-      - name: Check Test Coverage by Package
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const comment = `## 🧪 Test Quality Reminder\n\n` +
-              `### Test Coverage Guidelines\n` +
-              `- **Domain Layer**: Should have comprehensive unit tests\n` +
-              `- **Application Layer**: Test use cases and service orchestration\n` +
-              `- **Adapter Layer**: Test integration with external systems\n\n` +
-              `### Best Practices\n` +
-              `- ✅ Use meaningful test names (@DisplayName)\n` +
-              `- ✅ Follow AAA pattern (Arrange-Act-Assert)\n` +
-              `- ✅ Test edge cases and error scenarios\n` +
-              `- ✅ Use @Nested for grouping related tests\n` +
-              `- ✅ Mock external dependencies properly\n\n` +
-              `> Check the detailed JaCoCo report in the CI pipeline`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      # PR size check
-      - name: Check PR Size
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number
-            });
-
+            // PR stats
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number: issue_number });
             const additions = pr.data.additions;
             const deletions = pr.data.deletions;
             const changedFiles = pr.data.changed_files;
             const total = additions + deletions;
 
             let sizeLabel = '🟢 Small';
-            let message = 'This is a reasonably sized PR. Good job!';
+            let sizeMsg = 'Reasonable size.';
+            if (total > 1000) { sizeLabel = '🔴 Large'; sizeMsg = 'Consider splitting into smaller PRs.'; }
+            else if (total > 500) { sizeLabel = '🟡 Medium'; sizeMsg = 'Keep scope focused.'; }
 
-            if (total > 1000) {
-              sizeLabel = '🔴 Large';
-              message = '⚠️ This PR is quite large. Consider breaking it into smaller PRs for easier review.';
-            } else if (total > 500) {
-              sizeLabel = '🟡 Medium';
-              message = 'This PR is moderately sized. Ensure it focuses on a single concern.';
-            }
-
-            const comment = `## 📏 PR Size Analysis\n\n` +
+            // Build a single body
+            const marker = '<!-- AUTO_CODE_REVIEW_SUMMARY -->';
+            const body =
+              `${marker}\n` +
+              `## 🤖 Automated Code Review\n\n` +
+              `### ✅ Checks\n` +
+              `- Checkstyle: ${process.env.CHECKSTYLE_STATUS || 'done (see artifacts / review comments)'}\n` +
+              `- Dependency Check: ${process.env.DEPCHECK_STATUS || 'done (see logs)'}\n\n` +
+              `### 📏 PR Size\n` +
               `**Size**: ${sizeLabel}\n` +
-              `- **Lines added**: ${additions}\n` +
-              `- **Lines deleted**: ${deletions}\n` +
-              `- **Files changed**: ${changedFiles}\n` +
-              `- **Total changes**: ${total}\n\n` +
-              `${message}\n\n` +
-              `### 💡 Tips for Large PRs\n` +
-              `- Split into multiple smaller PRs by feature/layer\n` +
-              `- Separate refactoring from feature changes\n` +
-              `- Keep changes focused on a single concern`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      # Summary comment
-      - name: Post Review Summary
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const comment = `## 🤖 Automated Code Review Complete\n\n` +
-              `### ✅ Checks Performed\n` +
-              `- ✅ Checkstyle analysis\n` +
-              `- ✅ Architecture validation\n` +
-              `- ✅ Test quality guidelines\n` +
-              `- ✅ PR size analysis\n` +
-              `- ✅ Dependency vulnerability check\n\n` +
-              `### 📊 Review Reports\n` +
-              `Check the workflow artifacts for detailed reports.\n\n` +
-              `### 👀 Manual Review Required\n` +
-              `Automated checks are helpful but not exhaustive. Please ensure:\n` +
-              `- Business logic correctness\n` +
-              `- Security considerations\n` +
-              `- Performance implications\n` +
-              `- API contract compatibility\n\n` +
+              `- Lines added: ${additions}\n` +
+              `- Lines deleted: ${deletions}\n` +
+              `- Files changed: ${changedFiles}\n` +
+              `- Total changes: ${total}\n` +
+              `> ${sizeMsg}\n\n` +
+              `### 📦 Reports\n` +
+              `- Checkstyle report: workflow artifact (build/reports/checkstyle)\n` +
+              `- Reviewdog comments: on PR diff\n\n` +
               `---\n` +
-              `*Generated by GitHub Actions - Automated Code Review*`;
+              `*Generated by GitHub Actions*\n`;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+            // Find existing summary comment and update it
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.data.find(c => (c.body || '').includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
