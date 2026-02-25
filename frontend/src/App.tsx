@@ -14,6 +14,7 @@ import SettlementAdmin from './pages/SettlementAdmin';
 import GamesPage from './pages/GamesPage';
 import GomokuGame from './pages/GomokuGame';
 import BadukGame from './pages/BadukGame';
+import ViewerPage from './pages/ViewerPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -104,6 +105,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <BadukGame />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/viewer"
+            element={
+              <ProtectedRoute>
+                <ViewerPage />
               </ProtectedRoute>
             }
           />

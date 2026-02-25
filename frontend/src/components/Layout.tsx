@@ -52,6 +52,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <Link to="/games" className={navLinkClass('/games')}>
                     🎮 게임
                   </Link>
+                  <Link to="/viewer" className={navLinkClass('/viewer')}>
+                    📖 뷰어
+                  </Link>
                   {user.role === 'ADMIN' && (
                     <Link to="/admin" className={navLinkClass('/admin')}>
                       관리자
