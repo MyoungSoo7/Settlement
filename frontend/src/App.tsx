@@ -11,6 +11,9 @@ import OrderPage from './pages/OrderPage';
 import ProductPage from './pages/ProductPage';
 import SettlementDashboard from './pages/SettlementDashboardImproved';
 import SettlementAdmin from './pages/SettlementAdmin';
+import GamesPage from './pages/GamesPage';
+import GomokuGame from './pages/GomokuGame';
+import BadukGame from './pages/BadukGame';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -78,6 +81,30 @@ function App() {
               <AdminRoute>
                 <SettlementAdmin />
               </AdminRoute>
+            }
+          />
+          <Route
+            path="/games"
+            element={
+              <ProtectedRoute>
+                <GamesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/games/gomoku"
+            element={
+              <ProtectedRoute>
+                <GomokuGame />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/games/baduk"
+            element={
+              <ProtectedRoute>
+                <BadukGame />
+              </ProtectedRoute>
             }
           />
           <Route path="/" element={<Navigate to="/order" replace />} />
