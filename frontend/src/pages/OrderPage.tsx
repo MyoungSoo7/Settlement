@@ -6,7 +6,7 @@ import Card from '@/components/Card';
 import Spinner from '@/components/Spinner';
 
 const OrderPage: React.FC = () => {
-  const [userId, setUserId] = useState<number>(1); // 임시 사용자 ID
+  const userId = 1; // 임시 사용자 ID
   const [amount, setAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('CARD');
   const [loading, setLoading] = useState(false);

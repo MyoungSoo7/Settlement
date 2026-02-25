@@ -1,18 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { settlementApi } from '@/api/settlement';
 import { SettlementSearchRequest, SettlementSearchResponse, SettlementSearchItem } from '@/types';
-import StatusBadge from '@/components/StatusBadge';
-import DateRangePicker from '@/components/DateRangePicker';
-import EmptyState from '@/components/EmptyState';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
-import { useToast } from '@/contexts/ToastContext';
 
 const SettlementDashboard: React.FC = () => {
   const [data, setData] = useState<SettlementSearchResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [dateError, setDateError] = useState<string>('');
-  const { showToast } = useToast();
 
   // 검색 필터 상태
   const [filters, setFilters] = useState<SettlementSearchRequest>({
