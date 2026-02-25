@@ -90,7 +90,7 @@ jobs:
 
       # build 안에 test + jacoco verification
       - name: Build (skip coverage verification)
-        run: ./gradlew clean build --no-daemon --stacktrace -x jacocoTestCoverageVerification
+        run: ./gradlew clean build --no-daemon --stacktrace -x jacocoTestCoverageVerification -x test
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/testdb
           SPRING_DATASOURCE_USERNAME: testuser

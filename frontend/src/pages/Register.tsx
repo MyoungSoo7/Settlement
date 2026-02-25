@@ -30,8 +30,21 @@ const Register: React.FC = () => {
       console.log('회원가입 요청 데이터:', formData);
       const result = await authApi.register(formData);
       console.log('회원가입 성공:', result);
-      alert('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.');
-      window.location.href = '/login';
+
+      // 회원가입 성공 후 자동 로그인 시도
+      try {
+        const loginResponse = await authApi.login({
+          email: formData.email,
+          password: formData.password,
+        });
+        authApi.saveToken(loginResponse);
+        alert('회원가입이 완료되었습니다. 자동으로 로그인됩니다.');
+        navigate('/dashboard');
+      } catch (loginErr) {
+        console.error('자동 로그인 실패:', loginErr);
+        alert('회원가입은 성공했으나 자동 로그인에 실패했습니다. 로그인 페이지로 이동합니다.');
+        navigate('/login');
+      }
     } catch (err: any) {
       console.error('Register error:', err);
       console.error('Error response:', err.response?.data);

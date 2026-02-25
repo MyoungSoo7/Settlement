@@ -96,6 +96,7 @@ public class SecurityConfig {
                         // 인증 불필요 (Public endpoints)
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()               // 회원가입
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()          // 로그인
+                        .requestMatchers(HttpMethod.POST, "/users/password-reset/**").permitAll()  // 비밀번호 재설정
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         // 나머지는 인증 필요

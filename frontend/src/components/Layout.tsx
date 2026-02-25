@@ -43,6 +43,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <Link to="/order" className={navLinkClass('/order')}>
                     주문하기
                   </Link>
+                  <Link to="/product" className={navLinkClass('/product')}>
+                    상품관리
+                  </Link>
                   <Link to="/dashboard" className={navLinkClass('/dashboard')}>
                     정산 조회
                   </Link>

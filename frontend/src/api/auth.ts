@@ -27,15 +27,27 @@ export const authApi = {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user_email');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('login_timestamp');
   },
 
   /**
    * 토큰 저장
    */
   saveToken: (loginResponse: LoginResponse): void => {
+    // 기존 로그인 세션이 있는지 확인
+    const existingEmail = localStorage.getItem('user_email');
+
+    if (existingEmail && existingEmail !== loginResponse.email) {
+      console.warn(`세션 교체: ${existingEmail} -> ${loginResponse.email}`);
+      // 기존 세션 정보 제거
+      authApi.logout();
+    }
+
+    // 새 세션 저장
     localStorage.setItem('access_token', loginResponse.token);
     localStorage.setItem('user_email', loginResponse.email);
     localStorage.setItem('user_role', loginResponse.role);
+    localStorage.setItem('login_timestamp', new Date().toISOString());
   },
 
   /**

@@ -5,7 +5,10 @@ import { ToastProvider } from './contexts/ToastContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import OrderPage from './pages/OrderPage';
+import ProductPage from './pages/ProductPage';
 import SettlementDashboard from './pages/SettlementDashboardImproved';
 import SettlementAdmin from './pages/SettlementAdmin';
 
@@ -43,11 +46,21 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/order"
             element={
               <ProtectedRoute>
                 <OrderPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/product"
+            element={
+              <ProtectedRoute>
+                <ProductPage />
               </ProtectedRoute>
             }
           />

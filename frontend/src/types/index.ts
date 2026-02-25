@@ -135,3 +135,40 @@ export interface RefundResponse {
   createdAt: string;
   payment: PaymentResponse;
 }
+
+// Product Types
+export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'OUT_OF_STOCK' | 'DISCONTINUED';
+export type StockOperation = 'INCREASE' | 'DECREASE';
+
+export interface ProductCreateRequest {
+  name: string;
+  description?: string;
+  price: number;
+  stockQuantity: number;
+}
+
+export interface ProductResponse {
+  id: number;
+  name: string;
+  description?: string;
+  price: number;
+  stockQuantity: number;
+  status: ProductStatus;
+  availableForSale: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateProductInfoRequest {
+  name?: string;
+  description?: string;
+}
+
+export interface UpdateProductPriceRequest {
+  newPrice: number;
+}
+
+export interface UpdateProductStockRequest {
+  quantity: number;
+  operation: StockOperation;
+}

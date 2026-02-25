@@ -46,6 +46,9 @@ dependencies {
     // Spring Batch
     implementation("org.springframework.boot:spring-boot-starter-batch")
 
+    // Mail
+    implementation("org.springframework.boot:spring-boot-starter-mail")
+
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")

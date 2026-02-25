@@ -58,6 +58,13 @@ api.interceptors.response.use(
 
     // 403 Forbidden: 권한 없음
     if (error.response?.status === 403) {
+      // 비밀번호 재설정 API는 인증 없이 호출 가능해야 함
+      const isPasswordResetEndpoint = error.config?.url?.includes('/password-reset');
+
+      if (isPasswordResetEndpoint) {
+        console.error('[개발자] 비밀번호 재설정 API가 Spring Security에서 차단됨. SecurityConfig 확인 필요:', error.response.data);
+      }
+
       if (globalShowToast) {
         globalShowToast('접근 권한이 없습니다.', 'error');
       }
