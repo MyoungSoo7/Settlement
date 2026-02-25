@@ -60,11 +60,13 @@ spring:
       mail:
         smtp:
           auth: true
-          ssl:
-            trust: "*"
           starttls:
             enable: true
             required: true
+            # 아래 설정을 추가하거나 확인해 보세요
+          ssl:
+            trust: smtp.gmail.com
+            protocols: TLSv1.2
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
@@ -79,6 +81,12 @@ server:
     threads:
       max: 200
       min-spare: 10
+    uri-encoding: UTF-8  # URL 파라미터 한글 인코딩
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true  # 요청/응답 모두 UTF-8 강제
 
 
 management:
@@ -94,6 +102,8 @@ management:
       probes:
         enabled: true  # K8s Liveness/Readiness Probe 활성화
   health:
+    mail:
+      enabled: false
     livenessState:
       enabled: true
     readinessState:
@@ -103,7 +113,7 @@ management:
     db:
       enabled: true  # PostgreSQL Health Check
   server:
-    port: 8080  # Management 포트를 메인 포트와 동일하게 설정
+    port: 8088  # Management 포트를 메인 포트와 동일하게 설정
   metrics:
     distribution:
       percentiles-histogram:
