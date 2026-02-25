@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/home/gradle/.gradle \
 ############################
 # Stage 2: Runtime
 ############################
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 # tini: PID1 시그널/좀비 프로세스 처리 (graceful shutdown 안정)
 RUN apk add --no-cache curl tini
