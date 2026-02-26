@@ -11,6 +11,7 @@ public class Order {
 
     private Long id;
     private Long userId;
+    private Long productId;
     private BigDecimal amount;
     private OrderStatus status;
     private LocalDateTime createdAt;
@@ -24,10 +25,11 @@ public class Order {
     }
 
     // 전체 생성자
-    public Order(Long id, Long userId, BigDecimal amount, OrderStatus status,
+    public Order(Long id, Long userId, Long productId, BigDecimal amount, OrderStatus status,
                  LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.userId = userId;
+        this.productId = productId;
         this.amount = amount;
         this.status = status != null ? status : OrderStatus.CREATED;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
@@ -35,13 +37,18 @@ public class Order {
     }
 
     // 정적 팩토리 메서드
-    public static Order create(Long userId, BigDecimal amount) {
+    public static Order create(Long userId, Long productId, BigDecimal amount) {
         Order order = new Order();
         order.setUserId(userId);
+        order.setProductId(productId);
         order.setAmount(amount);
         order.validateUserId();
         order.validateAmount();
         return order;
+    }
+
+    public static Order create(Long userId, BigDecimal amount) {
+        return create(userId, 1L, amount); // 기본 productId를 1로 지정
     }
 
     // 도메인 규칙: userId 검증
@@ -108,6 +115,14 @@ public class Order {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getProductId() {
+        return productId;
+    }
+
+    public void setProductId(Long productId) {
+        this.productId = productId;
     }
 
     public BigDecimal getAmount() {

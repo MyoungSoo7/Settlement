@@ -7,7 +7,9 @@ import github.lms.lemuel.user.domain.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * User Persistence Adapter (충돌 방지: @Repository + 고유 패키지)
@@ -23,6 +25,14 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, Exist
     public Optional<User> findById(Long userId) {
         return userJpaRepository.findById(userId)
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<User> findAll() {
+        return userJpaRepository.findAll()
+                .stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
     }
 
     @Override

@@ -35,6 +35,14 @@ public class OrderPersistenceAdapter implements LoadOrderPort, SaveOrderPort {
     }
 
     @Override
+    public List<Order> findAll() {
+        return orderJpaRepository.findAll()
+                .stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public Order save(Order order) {
         OrderJpaEntity entity = mapper.toEntity(order);
         OrderJpaEntity saved = orderJpaRepository.save(entity);

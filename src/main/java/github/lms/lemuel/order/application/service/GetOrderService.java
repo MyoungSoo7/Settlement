@@ -30,4 +30,9 @@ public class GetOrderService implements GetOrderUseCase {
     public List<Order> getOrdersByUserId(Long userId) {
         return loadOrderPort.findByUserId(userId);
     }
+
+    @Override
+    public List<Order> getAllOrders() {
+        return loadOrderPort.findAll();
+    }
 }

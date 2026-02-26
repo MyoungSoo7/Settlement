@@ -88,12 +88,14 @@ export interface SettlementSearchResponse {
 // Order Types
 export interface OrderCreateRequest {
   userId: number;
+  productId: number;
   amount: number;
 }
 
 export interface OrderResponse {
   id: number;
   userId: number;
+  productId: number;
   amount: number;
   status: string;
   createdAt: string;
@@ -104,6 +106,20 @@ export interface OrderResponse {
 export interface PaymentRequest {
   orderId: number;
   paymentMethod: string;
+}
+
+export interface TossConfirmRequest {
+  dbOrderId: number;
+  paymentKey: string;
+  tossOrderId: string;
+  amount: number;
+}
+
+export interface TossCartConfirmRequest {
+  orderIds: number[];
+  paymentKey: string;
+  tossOrderId: string;
+  totalAmount: number;
 }
 
 export interface PaymentResponse {
@@ -193,6 +209,30 @@ export interface ProductImageResponse {
   updatedAt: string;
 }
 
+// Review Types
+export interface ReviewCreateRequest {
+  productId: number;
+  userId: number;
+  rating: number; // 1-5
+  content?: string;
+}
+
+export interface ReviewUpdateRequest {
+  userId: number;
+  rating: number;
+  content?: string;
+}
+
+export interface ReviewResponse {
+  id: number;
+  productId: number;
+  userId: number;
+  rating: number;
+  content?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Category Types
 export interface CategoryResponse {
   id: number;
@@ -234,4 +274,36 @@ export interface CreateTagRequest {
 export interface UpdateTagRequest {
   name?: string;
   color?: string;
+}
+
+// Coupon Types
+export type CouponType = 'FIXED' | 'PERCENTAGE';
+
+export interface CouponResponse {
+  id: number;
+  code: string;
+  type: CouponType;
+  discountValue: number;
+  minOrderAmount: number;
+  maxUses: number;
+  usedCount: number;
+  expiresAt?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CouponValidateResponse {
+  valid: boolean;
+  message: string;
+  discountAmount: number;
+  finalAmount: number;
+}
+
+export interface CouponCreateRequest {
+  code: string;
+  type: CouponType;
+  discountValue: number;
+  minOrderAmount: number;
+  maxUses: number;
+  expiresAt?: string;
 }

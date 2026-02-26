@@ -30,7 +30,7 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
         Order order = createOrderUseCase.createOrder(
-                new CreateOrderUseCase.CreateOrderCommand(request.getUserId(), request.getAmount())
+                new CreateOrderUseCase.CreateOrderCommand(request.getUserId(), request.getProductId(), request.getAmount())
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(OrderResponse.from(order));
     }
@@ -44,6 +44,15 @@ public class OrderController {
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<OrderResponse>> getUserOrders(@PathVariable Long userId) {
         List<OrderResponse> orders = getOrderUseCase.getOrdersByUserId(userId)
+                .stream()
+                .map(OrderResponse::from)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/admin/all")
+    public ResponseEntity<List<OrderResponse>> getAllOrders() {
+        List<OrderResponse> orders = getOrderUseCase.getAllOrders()
                 .stream()
                 .map(OrderResponse::from)
                 .collect(Collectors.toList());

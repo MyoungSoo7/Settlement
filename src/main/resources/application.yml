@@ -27,6 +27,7 @@ spring:
     schemas: opslab
     default-schema: opslab
     create-schemas: true
+    validate-on-migrate: false
 
   data:
     elasticsearch:
@@ -155,5 +156,9 @@ app:
   password-reset:
     token-expiry-minutes: 30
     base-url: ${APP_BASE_URL:http://localhost:5173}
+
+toss:
+  secret-key: ${TOSS_SECRET_KEY:test_sk_zXLkKEypNArWmo50nX3lmeaxYG5R}
+  api-url: https://api.tosspayments.com/v1/payments/confirm
 
 

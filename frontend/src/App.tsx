@@ -2,9 +2,11 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { authApi } from './api/auth';
 import { ToastProvider } from './contexts/ToastContext';
+import { CartProvider } from './contexts/CartContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import StartPage from './pages/StartPage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import OrderPage from './pages/OrderPage';
@@ -18,6 +20,11 @@ import ViewerPage from './pages/ViewerPage';
 import CategoryManagementPage from './pages/CategoryManagementPage';
 import TagManagementPage from './pages/TagManagementPage';
 import EcommerceCategoryAdmin from './pages/EcommerceCategoryAdmin';
+import TossPaymentSuccess from './pages/TossPaymentSuccess';
+import TossPaymentFail from './pages/TossPaymentFail';
+import CartPage from './pages/CartPage';
+import MyPage from './pages/MyPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -40,7 +47,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (user?.role !== 'ADMIN') {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/order" replace />;
   }
 
   return <Layout>{children}</Layout>;
@@ -49,6 +56,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 function App() {
   return (
     <ToastProvider>
+      <CartProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -74,13 +82,21 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <SettlementDashboard />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
           <Route
             path="/admin"
+            element={
+              <AdminRoute>
+                <AdminDashboardPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/settlement"
             element={
               <AdminRoute>
                 <SettlementAdmin />
@@ -143,9 +159,34 @@ function App() {
               </AdminRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/order" replace />} />
+          <Route
+            path="/order/toss/success"
+            element={
+              <ProtectedRoute>
+                <TossPaymentSuccess />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/order/toss/fail" element={<TossPaymentFail />} />
+          <Route
+            path="/mypage"
+            element={
+              <ProtectedRoute>
+                <MyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/cart"
+            element={
+              <ProtectedRoute>
+                <CartPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<StartPage />} />
         </Routes>
       </BrowserRouter>
+      </CartProvider>
     </ToastProvider>
   );
 }

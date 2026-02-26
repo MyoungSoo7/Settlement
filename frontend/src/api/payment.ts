@@ -1,5 +1,5 @@
 import api from './axios';
-import { PaymentRequest, PaymentResponse } from '@/types';
+import { PaymentRequest, PaymentResponse, TossConfirmRequest, TossCartConfirmRequest } from '@/types';
 
 export const paymentApi = {
   /**
@@ -35,6 +35,24 @@ export const paymentApi = {
    */
   getPayment: async (id: number): Promise<PaymentResponse> => {
     const response = await api.get<PaymentResponse>(`/payments/${id}`);
+    return response.data;
+  },
+
+  /**
+   * 토스페이먼츠 결제 확인
+   * POST /payments/toss/confirm
+   */
+  confirmTossPayment: async (request: TossConfirmRequest): Promise<PaymentResponse> => {
+    const response = await api.post<PaymentResponse>('/payments/toss/confirm', request);
+    return response.data;
+  },
+
+  /**
+   * 토스페이먼츠 장바구니 일괄 결제 확인
+   * POST /payments/toss/cart/confirm
+   */
+  confirmTossCartPayment: async (request: TossCartConfirmRequest): Promise<PaymentResponse[]> => {
+    const response = await api.post<PaymentResponse[]>('/payments/toss/cart/confirm', request);
     return response.data;
   },
 };
