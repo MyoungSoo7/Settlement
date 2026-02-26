@@ -13,4 +13,6 @@ public interface LoadOrderPort {
     Optional<Order> findById(Long orderId);
 
     List<Order> findByUserId(Long userId);
+
+    List<Order> findAll();
 }

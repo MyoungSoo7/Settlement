@@ -27,6 +27,7 @@ spring:
     schemas: opslab
     default-schema: opslab
     create-schemas: true
+    validate-on-migrate: false
 
   data:
     elasticsearch:

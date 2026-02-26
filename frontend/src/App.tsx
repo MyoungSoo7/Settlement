@@ -24,6 +24,7 @@ import TossPaymentSuccess from './pages/TossPaymentSuccess';
 import TossPaymentFail from './pages/TossPaymentFail';
 import CartPage from './pages/CartPage';
 import MyPage from './pages/MyPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -46,7 +47,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (user?.role !== 'ADMIN') {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/order" replace />;
   }
 
   return <Layout>{children}</Layout>;
@@ -81,13 +82,21 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <SettlementDashboard />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
           <Route
             path="/admin"
+            element={
+              <AdminRoute>
+                <AdminDashboardPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/settlement"
             element={
               <AdminRoute>
                 <SettlementAdmin />

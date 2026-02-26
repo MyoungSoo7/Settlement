@@ -50,6 +50,15 @@ public class OrderController {
         return ResponseEntity.ok(orders);
     }
 
+    @GetMapping("/admin/all")
+    public ResponseEntity<List<OrderResponse>> getAllOrders() {
+        List<OrderResponse> orders = getOrderUseCase.getAllOrders()
+                .stream()
+                .map(OrderResponse::from)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(orders);
+    }
+
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<OrderResponse> cancelOrder(@PathVariable Long id) {
         Order order = changeOrderStatusUseCase.cancelOrder(id);

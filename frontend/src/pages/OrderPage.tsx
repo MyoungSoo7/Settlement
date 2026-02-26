@@ -3,12 +3,14 @@ import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
 import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
-import { OrderResponse, PaymentResponse, ProductResponse, ReviewResponse } from '@/types';
+import { couponApi } from '@/api/coupon';
+import { OrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponValidateResponse } from '@/types';
 import { useCart } from '@/contexts/CartContext';
 import Card from '@/components/Card';
 import Spinner from '@/components/Spinner';
 import StarRating from '@/components/review/StarRating';
 import ReviewList from '@/components/review/ReviewList';
+import CouponInput from '@/components/coupon/CouponInput';
 
 const PRODUCTS_PER_PAGE = 5;
 const TOSS_CLIENT_KEY = import.meta.env.VITE_TOSS_CLIENT_KEY as string;
@@ -43,6 +45,10 @@ const OrderFormTab: React.FC = () => {
   const [payment, setPayment] = useState<PaymentResponse | null>(null);
   const [step, setStep] = useState<'input' | 'order-created' | 'payment-ready' | 'completed'>('input');
 
+  // 쿠폰
+  const [couponResult, setCouponResult] = useState<CouponValidateResponse | null>(null);
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
+
   // 상품 리뷰 미리보기
   const [reviews, setReviews] = useState<ReviewResponse[]>([]);
   const [reviewsOpen, setReviewsOpen] = useState(false);
@@ -74,12 +80,22 @@ const OrderFormTab: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      const finalAmount = couponResult ? couponResult.finalAmount : selectedProduct.price;
       const orderRes = await orderApi.createOrder({
         userId,
         productId: selectedProduct.id,
-        amount: selectedProduct.price,
+        amount: finalAmount,
       });
       setOrder(orderRes);
+
+      // 쿠폰 사용 처리
+      if (appliedCouponCode) {
+        try {
+          await couponApi.use(appliedCouponCode, userId, orderRes.id);
+        } catch {
+          // 쿠폰 사용 실패해도 주문은 유지
+        }
+      }
 
       if (paymentMethod === 'TOSS_PAYMENTS') {
         await handleTossPayment(orderRes);
@@ -169,6 +185,8 @@ const OrderFormTab: React.FC = () => {
     setPayment(null);
     setError(null);
     setStep('input');
+    setCouponResult(null);
+    setAppliedCouponCode(undefined);
   };
 
   const fmt = (v: number) =>
@@ -288,8 +306,34 @@ const OrderFormTab: React.FC = () => {
                 <p className="text-xs font-medium text-blue-600 mb-1">선택된 상품</p>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-800">{selectedProduct.name}</span>
-                  <span className="font-bold text-blue-700">{fmt(selectedProduct.price)}</span>
+                  <div className="text-right">
+                    {couponResult && (
+                      <p className="text-xs text-gray-400 line-through">{fmt(selectedProduct.price)}</p>
+                    )}
+                    <p className="font-bold text-blue-700">
+                      {fmt(couponResult ? couponResult.finalAmount : selectedProduct.price)}
+                    </p>
+                    {couponResult && (
+                      <p className="text-xs text-green-600 font-medium">
+                        -{fmt(couponResult.discountAmount)} 할인
+                      </p>
+                    )}
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* 쿠폰 입력 */}
+            {selectedProduct && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">쿠폰 코드</label>
+                <CouponInput
+                  userId={userId}
+                  orderAmount={selectedProduct.price}
+                  onApply={(result, code) => { setCouponResult(result); setAppliedCouponCode(code); }}
+                  onRemove={() => { setCouponResult(null); setAppliedCouponCode(undefined); }}
+                  appliedCode={appliedCouponCode}
+                />
               </div>
             )}
 
@@ -390,7 +434,15 @@ const OrderFormTab: React.FC = () => {
             </div>
             <div className="flex justify-between py-2.5 border-b">
               <span className="text-gray-500 text-sm">주문 금액</span>
-              <span className="font-bold">{fmt(order.amount)}</span>
+              <div className="text-right">
+                {couponResult && (
+                  <p className="text-xs text-gray-400 line-through">{fmt(selectedProduct!.price)}</p>
+                )}
+                <span className="font-bold">{fmt(order.amount)}</span>
+                {couponResult && (
+                  <p className="text-xs text-green-600">{appliedCouponCode} 적용</p>
+                )}
+              </div>
             </div>
             <div className="flex justify-between py-2.5 border-b">
               <span className="text-gray-500 text-sm">주문 상태</span>

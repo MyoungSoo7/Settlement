@@ -19,7 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const isActive = (path: string) => {
-    return location.pathname === path;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const navLinkClass = (path: string) => {
@@ -65,7 +65,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   </Link>
                   {user.role === 'ADMIN' && (
                     <Link to="/admin" className={navLinkClass('/admin')}>
-                      관리자
+                      🛠 관리자
                     </Link>
                   )}
                 </nav>

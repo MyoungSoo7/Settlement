@@ -275,3 +275,35 @@ export interface UpdateTagRequest {
   name?: string;
   color?: string;
 }
+
+// Coupon Types
+export type CouponType = 'FIXED' | 'PERCENTAGE';
+
+export interface CouponResponse {
+  id: number;
+  code: string;
+  type: CouponType;
+  discountValue: number;
+  minOrderAmount: number;
+  maxUses: number;
+  usedCount: number;
+  expiresAt?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CouponValidateResponse {
+  valid: boolean;
+  message: string;
+  discountAmount: number;
+  finalAmount: number;
+}
+
+export interface CouponCreateRequest {
+  code: string;
+  type: CouponType;
+  discountValue: number;
+  minOrderAmount: number;
+  maxUses: number;
+  expiresAt?: string;
+}

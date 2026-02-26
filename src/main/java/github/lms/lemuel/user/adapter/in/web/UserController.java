@@ -14,7 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * User API Controller
@@ -40,6 +42,15 @@ public class UserController {
     public ResponseEntity<UserResponse> getUser(@PathVariable Long id) {
         User user = getUserUseCase.getUserById(id);
         return ResponseEntity.ok(UserResponse.from(user));
+    }
+
+    @GetMapping("/admin/all")
+    public ResponseEntity<List<UserResponse>> getAllUsers() {
+        List<UserResponse> users = getUserUseCase.getAllUsers()
+                .stream()
+                .map(UserResponse::from)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(users);
     }
 
     /**

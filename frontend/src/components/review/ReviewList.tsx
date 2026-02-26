@@ -102,7 +102,7 @@ const ReviewList: React.FC<ReviewListProps> = ({
               </div>
             </div>
             {review.content && (
-              <p className="text-sm text-gray-700 mt-2 leading-relaxed ml-9">{review.content}</p>
+              <p className="text-sm text-gray-900 mt-2 leading-relaxed ml-9">{review.content}</p>
             )}
             <p className="text-xs text-gray-400 mt-2 ml-9">
               {new Date(review.createdAt).toLocaleDateString('ko-KR', {

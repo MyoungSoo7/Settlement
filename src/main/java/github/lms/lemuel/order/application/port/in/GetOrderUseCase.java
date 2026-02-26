@@ -12,4 +12,6 @@ public interface GetOrderUseCase {
     Order getOrderById(Long orderId);
 
     List<Order> getOrdersByUserId(Long userId);
+
+    List<Order> getAllOrders();
 }

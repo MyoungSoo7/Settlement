@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useCart, CartItem } from '@/contexts/CartContext';
 import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
+import { couponApi } from '@/api/coupon';
+import { CouponValidateResponse } from '@/types';
 import Spinner from '@/components/Spinner';
+import CouponInput from '@/components/coupon/CouponInput';
 
 const USER_ID = 1;
 const TOSS_CLIENT_KEY = import.meta.env.VITE_TOSS_CLIENT_KEY as string;
@@ -101,7 +104,6 @@ interface OrderResult {
    CartPage
 ───────────────────────────────────────── */
 const CartPage: React.FC = () => {
-  const navigate = useNavigate();
   const { items, removeItem, updateQuantity, clearCart, totalAmount, totalCount } = useCart();
   const [paymentMethod, setPaymentMethod] = useState('CARD');
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'processing' | 'done'>('cart');
@@ -109,22 +111,31 @@ const CartPage: React.FC = () => {
   const [processingIdx, setProcessingIdx] = useState(0);
   const [results, setResults] = useState<OrderResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [couponResult, setCouponResult] = useState<CouponValidateResponse | null>(null);
+  const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
+
+  const discountedTotal = couponResult ? couponResult.finalAmount : totalAmount;
 
   /* ── 일반 결제 (CARD / BANK_TRANSFER / VIRTUAL_ACCOUNT) ── */
   const handleNormalCheckout = async () => {
     setCheckoutStep('processing');
     setError(null);
     const completed: OrderResult[] = [];
+    const discountRatio = totalAmount > 0 ? discountedTotal / totalAmount : 1;
 
     for (let idx = 0; idx < items.length; idx++) {
       setProcessingIdx(idx);
       setProcessingMsg(`주문 처리 중... (${idx + 1}/${items.length})`);
       const { product, quantity } = items[idx];
+      const itemOriginal = product.price * quantity;
+      const itemFinal = idx === items.length - 1
+        ? Math.max(1, discountedTotal - completed.reduce((s, r) => s + r.amount, 0))
+        : Math.round(itemOriginal * discountRatio);
       try {
         const order = await orderApi.createOrder({
           userId: USER_ID,
           productId: product.id,
-          amount: product.price * quantity,
+          amount: itemFinal,
         });
         const payment = await paymentApi.createPayment({ orderId: order.id, paymentMethod });
         const authorized = await paymentApi.authorizePayment(payment.id);
@@ -137,6 +148,12 @@ const CartPage: React.FC = () => {
         setCheckoutStep('done');
         return;
       }
+    }
+
+    if (appliedCouponCode && completed.length > 0) {
+      try {
+        await couponApi.use(appliedCouponCode, USER_ID, completed[0].orderId);
+      } catch { /* 쿠폰 사용 기록 실패 무시 */ }
     }
 
     setResults(completed);
@@ -187,7 +204,7 @@ const CartPage: React.FC = () => {
         `?type=cart&dbOrderIds=${orderIds.join(',')}`;
 
       await tossPayments.requestPayment('카드', {
-        amount: Math.round(totalAmount),
+        amount: Math.round(discountedTotal),
         orderId: tossOrderId,
         orderName,
         customerName: '테스트 고객',
@@ -377,10 +394,36 @@ const CartPage: React.FC = () => {
                 ))}
               </div>
 
+              {/* 쿠폰 */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">쿠폰 코드</label>
+                <CouponInput
+                  userId={USER_ID}
+                  orderAmount={totalAmount}
+                  onApply={(result, code) => { setCouponResult(result); setAppliedCouponCode(code); }}
+                  onRemove={() => { setCouponResult(null); setAppliedCouponCode(undefined); }}
+                  appliedCode={appliedCouponCode}
+                />
+              </div>
+
               {/* 합계 */}
-              <div className="flex justify-between items-center pt-3 border-t border-gray-200 mb-5">
-                <span className="font-bold text-gray-900">총 결제 금액</span>
-                <span className="text-xl font-bold text-blue-600">{fmt(totalAmount)}</span>
+              <div className="pt-3 border-t border-gray-200 mb-5 space-y-1">
+                {couponResult && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">상품 합계</span>
+                      <span className="text-gray-400 line-through">{fmt(totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-green-600 font-medium">쿠폰 할인 ({appliedCouponCode})</span>
+                      <span className="text-green-600 font-medium">-{fmt(couponResult.discountAmount)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-gray-900">총 결제 금액</span>
+                  <span className="text-xl font-bold text-blue-600">{fmt(discountedTotal)}</span>
+                </div>
               </div>
 
               {/* 결제 수단 */}
@@ -407,7 +450,7 @@ const CartPage: React.FC = () => {
                       clipRule="evenodd" />
                   </svg>
                   <p className="text-xs text-sky-800">
-                    장바구니 전체 금액({fmt(totalAmount)})을 토스페이먼츠로 한 번에 결제합니다.
+                    장바구니 전체 금액({fmt(discountedTotal)})을 토스페이먼츠로 한 번에 결제합니다.
                     주문 생성 후 결제 화면으로 이동합니다.
                   </p>
                 </div>
@@ -430,7 +473,7 @@ const CartPage: React.FC = () => {
                 }`}
               >
                 {paymentMethod === 'TOSS_PAYMENTS'
-                  ? `토스페이먼츠로 ${fmt(totalAmount)} 결제`
+                  ? `토스페이먼츠로 ${fmt(discountedTotal)} 결제`
                   : `${items.length}개 상품 전체 주문하기`}
               </button>
             </div>

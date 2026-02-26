@@ -21,17 +21,20 @@ BEGIN
     -- 1. 사용자 (10명: admin 1 + user 9)
     -- ─────────────────────────────────────────
     INSERT INTO users (email, password, role, created_at) VALUES
-        ('seed_admin@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'ADMIN', NOW() - INTERVAL '180 days'),
-        ('seed_user1@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '170 days'),
-        ('seed_user2@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '160 days'),
-        ('seed_user3@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '150 days'),
-        ('seed_user4@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '140 days'),
-        ('seed_user5@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '130 days'),
-        ('seed_user6@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '120 days'),
-        ('seed_user7@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '110 days'),
-        ('seed_user8@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '100 days'),
-        ('seed_user9@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',  NOW() - INTERVAL '90 days')
-    ON CONFLICT (email) DO NOTHING;
+        ('seed_admin@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'ADMIN',   NOW() - INTERVAL '180 days'),
+        ('seed_manager@test.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'MANAGER', NOW() - INTERVAL '175 days'),
+        ('seed_user1@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '170 days'),
+        ('seed_user2@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '160 days'),
+        ('seed_user3@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '150 days'),
+        ('seed_user4@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '140 days'),
+        ('seed_user5@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '130 days'),
+        ('seed_user6@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '120 days'),
+        ('seed_user7@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '110 days'),
+        ('seed_user8@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '100 days'),
+        ('seed_user9@test.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER',    NOW() - INTERVAL '90 days')
+    ON CONFLICT (email) DO UPDATE SET 
+        role = EXCLUDED.role,
+        password = EXCLUDED.password;
 
     SELECT id INTO v_admin_id FROM users WHERE email = 'seed_admin@test.com';
     SELECT ARRAY(SELECT id FROM users WHERE email LIKE 'seed_user%@test.com' ORDER BY id)

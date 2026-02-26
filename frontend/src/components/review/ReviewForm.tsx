@@ -64,7 +64,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({
           리뷰 내용 <span className="text-gray-400 font-normal">(선택)</span>
         </label>
         <textarea
-          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           rows={4}
           maxLength={1000}
           placeholder="상품에 대한 솔직한 리뷰를 남겨주세요."
