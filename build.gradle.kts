@@ -30,8 +30,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-web")
+
     implementation("org.flywaydb:flyway-core")
-    runtimeOnly("org.flywaydb:flyway-database-postgresql")
+    implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql:42.7.3")
 
     // SpringDoc OpenAPI
@@ -55,7 +56,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
     developmentOnly("org.springframework.boot:spring-boot-devtools")
-    runtimeOnly("org.postgresql:postgresql")
+
     testImplementation("com.h2database:h2")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
